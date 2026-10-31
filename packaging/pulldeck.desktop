@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=pulldeck
+Comment=Track your GitHub pull requests
+Exec=pulldeck
+Icon=github
+Terminal=false
+Categories=Development;
