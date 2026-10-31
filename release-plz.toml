@@ -7,6 +7,7 @@ git_release_enable = true
 git_release_type = "auto"
 # One tag per release for the whole workspace: v1.2.3
 git_tag_name = "v{{ version }}"
+git_release_name = "v{{ version }}"
 dependencies_update = false
 
 # The app owns the changelog and the tag; the core crate follows its version.
