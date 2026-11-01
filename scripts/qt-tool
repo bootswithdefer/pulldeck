@@ -1,0 +1,36 @@
+#!/bin/sh
+# Run a Qt 6 command-line tool (qmllint, qmlformat, ...) wherever this machine keeps it.
+#
+# Plain `qmllint` can resolve to Qt 5's (Arch's qt5-declarative owns /usr/bin/qmllint and is a
+# silent no-op for Qt 6 code), while Qt 6's lives in /usr/lib/qt6/bin or a Nix store path.
+#
+# Usage: scripts/qt-tool <tool> [args...]
+set -eu
+
+[ $# -ge 1 ] || { echo "usage: qt-tool <tool> [args...]" >&2; exit 2; }
+tool=$1
+shift
+
+# 1. Ask qmake where Qt 6's binaries are (QMAKE overrides, then qmake6, then qmake on PATH).
+for qmake in "${QMAKE:-}" qmake6 qmake; do
+    [ -n "$qmake" ] || continue
+    bindir=$("$qmake" -query QT_INSTALL_BINS 2>/dev/null || true)
+    if [ -n "$bindir" ] && [ -x "$bindir/$tool" ]; then
+        case $("$bindir/$tool" --version 2>&1) in
+            *" 6."*) exec "$bindir/$tool" "$@" ;;
+        esac
+    fi
+done
+
+# 2. Versioned or plain name on PATH, accepted only if it really is Qt 6.
+for name in "${tool}6" "$tool"; do
+    if command -v "$name" >/dev/null 2>&1; then
+        case $("$name" --version 2>&1) in
+            *" 6."*) exec "$name" "$@" ;;
+        esac
+    fi
+done
+
+echo "qt-tool: no Qt 6 '$tool' found. Install Qt 6 declarative tools (see CONTRIBUTING.md)," >&2
+echo "         or set QMAKE to your Qt 6 qmake." >&2
+exit 127

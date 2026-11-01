@@ -43,14 +43,17 @@ jobs:
       - name: Install Qt 6
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev qt6-declarative-dev libgl1-mesa-dev \
+          sudo apt-get install -y qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools libgl1-mesa-dev \
             qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3.1.0
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - run: just qml-fmt-check
+      - run: just qml-lint
 
   # The same hooks contributors run locally (see prek.toml), so CI can't drift from them.
   # Slow pre-push hooks (clippy, test, deny) are covered by the jobs here; pinact-check

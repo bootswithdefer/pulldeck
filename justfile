@@ -40,8 +40,8 @@ clean:
 
 # ── quality ──────────────────────────────────────────────────────────
 
-# Fast checks: rustfmt, clippy and tests
-check: fmt-check clippy test
+# Fast checks: rustfmt, clippy, tests and the QML checks
+check: fmt-check clippy test qml-fmt-check qml-lint
 
 # Everything CI checks, including cargo-deny
 ci: check deny
@@ -66,6 +66,19 @@ fix:
 # Run all unit tests
 test:
     cargo test --workspace
+
+# Lint the QML; warnings are errors. Uses the app's generated types, so it builds first if needed
+qml-lint:
+    test -d target/cxxqt/qml_modules || cargo build -p pulldeck
+    scripts/qt-tool qmllint --max-warnings 0 -I target/cxxqt/qml_modules crates/pulldeck/qml/*.qml
+
+# Format the QML in place
+qml-fmt:
+    scripts/qt-tool qmlformat -i crates/pulldeck/qml/*.qml
+
+# Fail if the QML is not formatted
+qml-fmt-check:
+    for f in crates/pulldeck/qml/*.qml; do scripts/qt-tool qmlformat "$f" | diff -u "$f" - || exit 1; done
 
 # Licenses, advisories, bans and sources (needs cargo-deny)
 deny:

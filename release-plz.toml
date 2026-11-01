@@ -10,6 +10,9 @@ git_release_type = "auto"
 git_tag_name = "v{{ version }}"
 git_release_name = "v{{ version }}"
 dependencies_update = false
+# Only cut a release when there is something user-visible to say. Without this, docs/ci/build
+# commits that touch package files would open empty "release v0.1.x" PRs.
+release_commits = "^(feat|fix|perf|refactor|revert)(\\(.+\\))?!?:"
 
 # The app owns the changelog and the tag; the core crate follows its version.
 [[package]]
