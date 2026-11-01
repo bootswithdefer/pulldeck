@@ -14,8 +14,9 @@
 
 </div>
 
-> **Status:** early. pulldeck currently lists your open PRs; notifications, history and a tray
-> icon are on the [roadmap](#roadmap).
+> **Status:** early. pulldeck lists your open PRs on its own. With an optional pulldeck server it
+> also gets live updates and lets you nudge, message and ask teammates for reviews. A tray icon and
+> history are on the [roadmap](#roadmap).
 
 ## Features
 
@@ -24,7 +25,15 @@
 - **Click to open** any PR in your browser.
 - **Auto-refresh** every 60 seconds, plus a manual refresh button.
 - **Zero-config auth**: uses `GH_TOKEN`, `GITHUB_TOKEN` or your existing `gh auth login`.
-  Tokens are never stored by pulldeck.
+  pulldeck never stores your GitHub token.
+- **Works on its own**: no server needed. It polls GitHub itself, retrying when GitHub's search
+  times out.
+- **Optional pulldeck server**: sign in from the toolbar (GitHub's device flow; the app never sees
+  your GitHub token, and the session token lives in your OS keyring) for live updates, an inbox,
+  and request review, nudge and message actions on the pull requests the server can see.
+  Pull requests it cannot see (for example in an organisation that has not installed its GitHub
+  App) keep being polled and are merged into the same list.
+- **Presence is opt-in**: telling others which PR you are viewing is off unless you turn it on.
 - **Native look**: Qt 6 with the Fusion style, which follows your KDE colour scheme.
 
 ## Install
@@ -75,6 +84,10 @@ gh auth login      # once, if you have not already
 pulldeck
 ```
 
+To use a server, click **Sign in…** and enter its address (`https`, or `http` only for
+`localhost`). Signing out returns to polling only. The server is a separate project; see
+[CONTRIBUTING](CONTRIBUTING.md#developing-against-a-server) for trying the client without one.
+
 Set `RUST_LOG=pulldeck=debug` for verbose logs. To use another Qt Quick style, set
 `QT_QUICK_CONTROLS_STYLE` (default `Fusion`).
 
@@ -92,23 +105,27 @@ flowchart LR
     subgraph core [pulldeck-core]
         auth --> client[GraphQL client]
         client --> models[PullRequest models]
+        session[server session] --> replica[replica + inbox]
     end
     subgraph app [pulldeck]
         backend[PrBackend QObject] --> qml[QML window]
     end
-    models --> backend
+    models -- polled list --> backend
+    replica -- server list --> backend
     client -- HTTPS --> api[(api.github.com)]
+    session -. optional, websocket .-> srv[(pulldeck server)]
 ```
 
 | Crate | Role |
 | --- | --- |
-| [`pulldeck-core`](crates/pulldeck-core) | Auth, paginated GraphQL search, models. No UI dependency, unit-tested. |
+| [`pulldeck-core`](crates/pulldeck-core) | Auth, paginated GraphQL search, models, and the optional server session (sign-in, websocket, replica, reconnect). No UI dependency, unit-tested. |
 | [`pulldeck`](crates/pulldeck) | Qt/QML app built with [cxx-qt](https://github.com/KDAB/cxx-qt). Network work runs on a tokio runtime and results are queued back to the Qt thread. |
 
 ## Roadmap
 
 - [ ] Review-requested tab
-- [ ] Desktop notifications (review requests, CI failures, approvals)
+- [ ] Desktop notifications (review requests, CI failures, approvals, inbox items)
+- [ ] Show other people's presence
 - [ ] System tray icon with attention state
 - [ ] Merged/closed history
 - [ ] Settings and filters (config in `~/.config/pulldeck/`)
