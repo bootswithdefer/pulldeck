@@ -1,0 +1,5 @@
+# https://github.com/crate-ci/typos/blob/master/docs/reference.md
+
+[default.extend-words]
+# Qt terminology: Q_INVOKABLE / #[qinvokable] / "invokable" methods.
+invokable = "invokable"

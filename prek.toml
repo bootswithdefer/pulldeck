@@ -1,0 +1,73 @@
+# https://prek.j178.dev/configuration/
+#
+# Setup (once per clone):  prek install
+# Run everything now:      prek run --all-files
+# Refresh pinned revs:     prek auto-update --freeze
+
+minimum_prek_version = "0.3.0"
+default_install_hook_types = ["pre-commit", "commit-msg", "pre-push"]
+
+# Generated or vendored files that hooks should leave alone.
+exclude = '^(Cargo\.lock|images/logo\.(svg|png)|CHANGELOG\.md)$'
+
+# ── General file hygiene ────────────────────────────────────────────
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "3e8a8703264a2f4a69428a0aa4dcb512790b2c8c"  # frozen: v6.0.0
+hooks = [
+  { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"] },
+  { id = "end-of-file-fixer" },
+  { id = "mixed-line-ending", args = ["--fix=lf"] },
+  { id = "check-case-conflict" },
+  { id = "check-merge-conflict" },
+  { id = "check-executables-have-shebangs" },
+  { id = "check-shebang-scripts-are-executable" },
+  { id = "check-yaml" },
+  { id = "check-toml" },
+  { id = "check-json" },
+  { id = "check-added-large-files", args = ["--maxkb=500"] },
+  { id = "detect-private-key" },
+]
+
+# ── Spelling ────────────────────────────────────────────────────────
+[[repos]]
+repo = "https://github.com/crate-ci/typos"
+rev = "7f9d0819ca1c008ade73f4b41fa9d258d48f605b"  # frozen: v1.51.1
+hooks = [{ id = "typos" }]
+
+# ── Secrets ─────────────────────────────────────────────────────────
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = "83d9cd684c87d95d656c1458ef04895a7f1cbd8e"  # frozen: v8.30.1
+hooks = [{ id = "gitleaks" }]
+
+# ── GitHub Actions workflows ────────────────────────────────────────
+[[repos]]
+repo = "https://github.com/rhysd/actionlint"
+rev = "914e7df21a07ef503a81201c76d2b11c789d3fca"  # frozen: v1.7.12
+hooks = [{ id = "actionlint" }]
+
+# ── Commit messages must be Conventional Commits (drives release-plz) ─
+[[repos]]
+repo = "https://github.com/compilerla/conventional-pre-commit"
+rev = "33b50eb042bee26eac0ee96ad84aa9c1b4dccdd8"  # frozen: v4.5.0
+hooks = [
+  { id = "conventional-pre-commit", stages = ["commit-msg"], args = ["feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"] },
+]
+
+# ── Rust (local: uses the toolchain and tools you already have) ─────
+[[repos]]
+repo = "local"
+hooks = [
+  # Fast: runs on every commit that touches Rust or Cargo files.
+  { id = "cargo-fmt", name = "cargo fmt --check", language = "system", entry = "cargo fmt --all -- --check", files = '\.rs$', pass_filenames = false },
+  { id = "cargo-manifest", name = "Cargo.toml parses (cargo metadata)", language = "system", entry = "cargo metadata --no-deps --format-version 1 --offline", files = '(^|/)Cargo\.toml$', pass_filenames = false },
+
+  # Slower: only before pushing.
+  { id = "cargo-clippy", name = "cargo clippy -D warnings", language = "system", entry = "cargo clippy --workspace --all-targets -- -D warnings", files = '\.(rs|toml)$', pass_filenames = false, stages = ["pre-push"] },
+  { id = "cargo-test", name = "cargo test", language = "system", entry = "cargo test --workspace", files = '\.(rs|toml)$', pass_filenames = false, stages = ["pre-push"] },
+  { id = "cargo-deny", name = "cargo deny check", language = "system", entry = "cargo deny check", files = '(^|/)(Cargo\.(toml|lock)|deny\.toml)$', pass_filenames = false, stages = ["pre-push"] },
+
+  # Keep action pins honest (see `just pin`).
+  { id = "pinact-check", name = "pinact check (actions pinned to SHAs)", language = "system", entry = "pinact run --check", files = '^\.github/workflows/.*\.ya?ml$', pass_filenames = false },
+]
