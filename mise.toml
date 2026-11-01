@@ -1,8 +1,8 @@
 # https://mise.jdx.dev  —  `mise install` gives you the exact dev tools CI and the hooks use.
 # Versions are pinned (and checksummed in mise.lock); `mise upgrade --bump && mise lock` to refresh.
 #
-# Qt 6 is a system library, not managed here: see CONTRIBUTING.md (distro packages),
-# `nix develop` (flake.nix) or the dev container for a fully pinned Qt.
+# Qt 6 is a system library, not managed here: see CONTRIBUTING.md (distro packages) or use
+# `nix develop` (flake.nix) for a shell with a pinned Qt as well.
 
 [settings]
 lockfile = true

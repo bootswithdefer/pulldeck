@@ -21,6 +21,14 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools libg
   qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates
 ```
 
+**Or use Nix** instead of both of the above. It provides Qt 6.12, Rust 1.99.1 and every tool
+(flakes must be enabled in `nix.conf`):
+
+```bash
+nix develop     # then `just ci`, `just run`, ...
+nix build       # builds the app into ./result/bin/pulldeck
+```
+
 ## Workflow
 
 ```bash

@@ -54,6 +54,15 @@ cd pulldeck
 cargo install --path crates/pulldeck
 ```
 
+### With Nix
+
+The flake pins Qt 6 and Rust, so nothing else needs installing (flakes must be enabled):
+
+```bash
+nix run github:bootswithdefer/pulldeck     # build and run
+nix build github:bootswithdefer/pulldeck   # binary in ./result/bin/pulldeck
+```
+
 ### Pre-built binaries
 
 Tagged releases attach a Linux x86_64 tarball (needs Qt 6 installed) on the
