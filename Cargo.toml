@@ -9,7 +9,10 @@ rust-version = "1.99"
 license = "MIT"
 repository = "https://github.com/bootswithdefer/pulldeck"
 authors = ["bootswithdefer"]
-publish = false
+homepage = "https://github.com/bootswithdefer/pulldeck"
+readme = "README.md"
+keywords = ["github", "pull-request", "qt", "gui", "desktop"]
+categories = ["development-tools", "gui"]
 
 [workspace.dependencies]
 anyhow = "1"

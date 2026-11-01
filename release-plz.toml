@@ -1,7 +1,8 @@
 # https://release-plz.dev/docs/config
 [workspace]
 changelog_config = "cliff.toml"
-# Binaries are shipped via GitHub releases, not crates.io.
+# Not publishing to crates.io from CI yet. To enable: add a CARGO_REGISTRY_TOKEN secret,
+# pass it to the release job in .github/workflows/release-plz.yml, and set this to true.
 publish = false
 git_release_enable = true
 git_release_type = "auto"
