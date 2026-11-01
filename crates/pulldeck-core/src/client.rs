@@ -3,9 +3,15 @@
 use crate::{auth, ChecksStatus, Error, PullRequest, Result, ReviewStatus};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
 use serde_json::{json, Value};
+use std::time::Duration;
 
 const ENDPOINT: &str = "https://api.github.com/graphql";
 const PAGE_SIZE: u32 = 50;
+/// GitHub's search sometimes answers with a gateway timeout after ~30s and succeeds on the next
+/// try, so allow a slow answer and try a few times.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+const ATTEMPTS: u32 = 4;
+const RETRY_PAUSE: Duration = Duration::from_secs(1);
 
 const AUTHORED_QUERY: &str = r"
 query($q: String!, $after: String) {
@@ -32,6 +38,9 @@ query($q: String!, $after: String) {
 #[derive(Debug, Clone)]
 pub struct GitHubClient {
     http: reqwest::Client,
+    endpoint: String,
+    /// Pause before the second attempt; each further attempt waits one more of these.
+    retry_pause: Duration,
 }
 
 impl GitHubClient {
@@ -48,8 +57,13 @@ impl GitHubClient {
         );
         let http = reqwest::Client::builder()
             .default_headers(headers)
+            .timeout(REQUEST_TIMEOUT)
             .build()?;
-        Ok(Self { http })
+        Ok(Self {
+            http,
+            endpoint: ENDPOINT.into(),
+            retry_pause: RETRY_PAUSE,
+        })
     }
 
     /// Discovers a token (env or `gh`) and builds a client.
@@ -69,15 +83,7 @@ impl GitHubClient {
                 "query": AUTHORED_QUERY,
                 "variables": { "q": "is:pr is:open archived:false author:@me sort:updated-desc", "after": after },
             });
-            let response: Value = self
-                .http
-                .post(ENDPOINT)
-                .json(&body)
-                .send()
-                .await?
-                .error_for_status()?
-                .json()
-                .await?;
+            let response = self.post(&body).await?;
 
             let (page_login, page, next) = parse_page(&response)?;
             prs.extend(page);
@@ -88,6 +94,71 @@ impl GitHubClient {
         };
         Ok((login, prs))
     }
+}
+
+impl GitHubClient {
+    /// Posts one GraphQL request, trying again after a pause when GitHub answers 502, 503 or 504
+    /// or the network fails. Anything else is not retried: a 401 means the token is dead, and
+    /// 403 or 429 mean a rate limit, which is better waited out until the next poll.
+    async fn post(&self, body: &Value) -> Result<Value> {
+        let mut attempt = 1;
+        loop {
+            let failure = match self.http.post(&self.endpoint).json(body).send().await {
+                Ok(response) if response.status().is_success() => {
+                    return Ok(response.json().await?);
+                }
+                Ok(response) if is_gateway_error(response.status()) => Error::Api(format!(
+                    "GitHub answered HTTP {}",
+                    response.status().as_u16()
+                )),
+                Ok(response) => return Err(refused(response).await),
+                Err(e) if e.is_timeout() || e.is_connect() || e.is_request() => Error::Http(e),
+                Err(e) => return Err(e.into()),
+            };
+            if attempt >= ATTEMPTS {
+                return Err(failure);
+            }
+            tracing::debug!(attempt, error = %failure, "GitHub request failed; retrying");
+            tokio::time::sleep(self.retry_pause * attempt).await;
+            attempt += 1;
+        }
+    }
+}
+
+fn is_gateway_error(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 502..=504)
+}
+
+/// The error for a response GitHub refused, including what it said and the rate limit headers,
+/// which are what tell a rate limit from a permissions problem. Never includes the token.
+async fn refused(response: reqwest::Response) -> Error {
+    let status = response.status().as_u16();
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
+    let remaining = header("x-ratelimit-remaining");
+    let retry_after = header("retry-after");
+    let message = response
+        .json::<Value>()
+        .await
+        .ok()
+        .and_then(|v| v["message"].as_str().map(str::to_owned))
+        .unwrap_or_default();
+    let mut text = format!("GitHub refused the request (HTTP {status})");
+    if !message.is_empty() {
+        text.push_str(&format!(": {message}"));
+    }
+    if let Some(remaining) = remaining {
+        text.push_str(&format!(" [rate limit remaining {remaining}]"));
+    }
+    if let Some(retry_after) = retry_after {
+        text.push_str(&format!(" [retry after {retry_after}s]"));
+    }
+    Error::Api(text)
 }
 
 /// Parses one GraphQL search page into (viewer login, PRs, next cursor).
@@ -147,6 +218,79 @@ fn parse_pr(node: &Value) -> Option<PullRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn client_for(server: &MockServer) -> GitHubClient {
+        let mut client = GitHubClient::new("test-token").unwrap();
+        client.endpoint = server.uri();
+        client.retry_pause = Duration::from_millis(1);
+        client
+    }
+
+    fn one_page() -> Value {
+        json!({"data": {
+            "viewer": {"login": "octocat"},
+            "search": {"pageInfo": {"hasNextPage": false, "endCursor": null}, "nodes": []}
+        }})
+    }
+
+    #[tokio::test]
+    async fn a_gateway_error_is_retried_until_it_succeeds() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(502))
+            .up_to_n_times(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(one_page()))
+            .mount(&server)
+            .await;
+
+        let (login, prs) = client_for(&server).authored_prs().await.unwrap();
+        assert_eq!(login, "octocat");
+        assert!(prs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn gives_up_after_four_attempts() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(503))
+            .expect(4)
+            .mount(&server)
+            .await;
+
+        let err = client_for(&server).authored_prs().await.unwrap_err();
+        assert!(err.to_string().contains("503"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_rate_limit_is_not_retried_and_says_so() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(403)
+                    .insert_header("x-ratelimit-remaining", "0")
+                    .insert_header("retry-after", "60")
+                    .set_body_json(json!({"message": "API rate limit exceeded"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let err = client_for(&server)
+            .authored_prs()
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("403"), "{err}");
+        assert!(err.contains("API rate limit exceeded"), "{err}");
+        assert!(err.contains("remaining 0"), "{err}");
+        assert!(err.contains("retry after 60"), "{err}");
+        assert!(!err.contains("test-token"), "{err}");
+    }
 
     #[test]
     fn parses_a_page() {
