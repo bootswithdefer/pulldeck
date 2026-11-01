@@ -14,13 +14,13 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Qt 6
         run: |
           sudo apt-get update
           sudo apt-get install -y qt6-base-dev qt6-declarative-dev libgl1-mesa-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Check tag matches Cargo.toml version
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
@@ -40,7 +40,7 @@ jobs:
       # The release itself (and its notes, from CHANGELOG.md) is created by release-plz;
       # this only attaches the binaries.
       - name: Attach binaries
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             pulldeck-*.tar.gz
