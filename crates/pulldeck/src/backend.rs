@@ -51,6 +51,9 @@ pub mod qobject {
         /// "offline" without a server, otherwise "connecting", "live", "disconnected" or "failed".
         #[qproperty(QString, connection)]
         #[qproperty(bool, server_configured, cxx_name = "serverConfigured")]
+        /// Whether the user chose to tell others which PR they are viewing. Off by default; change
+        /// it with `setPresenceEnabled`, which also saves it.
+        #[qproperty(bool, presence)]
         /// "signedOut", "signingIn" or "signedIn" (a server session exists).
         #[qproperty(QString, auth)]
         /// While signing in: the code to enter on GitHub and where to enter it.
@@ -83,6 +86,16 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "signOut"]
         fn sign_out(self: Pin<&mut Self>);
+
+        /// Turn presence on or off and remember the choice. Turning it off also tells the server
+        /// we are no longer viewing anything.
+        #[qinvokable]
+        #[cxx_name = "setPresenceEnabled"]
+        fn set_presence_enabled(self: Pin<&mut Self>, enabled: bool);
+
+        /// The user opened this PR. Sent to the server only if presence is on.
+        #[qinvokable]
+        fn viewing(self: Pin<&mut Self>, repo: &QString, number: i64);
 
         /// Human-friendly age ("5m ago") of a Unix timestamp, relative to `now`.
         #[qinvokable]
@@ -312,6 +325,7 @@ pub struct PrBackendRust {
     loading: bool,
     connection: QString,
     server_configured: bool,
+    presence: bool,
     auth: QString,
     user_code: QString,
     verification_uri: QString,
@@ -337,6 +351,7 @@ impl Default for PrBackendRust {
             loading: false,
             connection: QString::from("offline"),
             server_configured: false,
+            presence: false,
             auth: QString::from("signedOut"),
             user_code: QString::default(),
             verification_uri: QString::default(),

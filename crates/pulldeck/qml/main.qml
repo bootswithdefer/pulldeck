@@ -90,6 +90,12 @@ ApplicationWindow {
                 implicitHeight: 24
                 implicitWidth: 24
             }
+            Switch {
+                visible: backend.auth === "signedIn"
+                text: qsTr("Share what I'm viewing")
+                checked: backend.presence
+                onToggled: backend.setPresenceEnabled(checked)
+            }
             ToolButton {
                 text: backend.auth === "signedIn" ? qsTr("Sign out") : qsTr("Sign in…")
                 onClicked: backend.auth === "signedIn" ? backend.signOut() : signIn.open()
@@ -152,7 +158,10 @@ ApplicationWindow {
                     required property string checks
                     required property real updatedAt
                     width: ListView.view.width
-                    onClicked: Qt.openUrlExternally(row.url)
+                    onClicked: {
+                        backend.viewing(row.repo, row.number);
+                        Qt.openUrlExternally(row.url);
+                    }
 
                     contentItem: RowLayout {
                         spacing: 12

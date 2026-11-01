@@ -52,6 +52,12 @@ fn development_session() -> Option<(ServerUrl, SessionToken)> {
     }
 }
 
+/// What to tell the server about the PR the user is looking at. Presence is opt-in: with it off
+/// nothing is ever sent, whatever the caller asks.
+fn presence_command(enabled: bool, viewing: Option<PrRef>) -> Option<ClientCommand> {
+    enabled.then_some(ClientCommand::Presence { viewing })
+}
+
 fn pr_ref(repo: &QString, number: i64) -> PrRef {
     PrRef {
         repo: repo.to_string(),
@@ -98,6 +104,8 @@ impl qobject::PrBackend {
             crate::demo::start(self);
             return;
         }
+        let presence = crate::auth::load_settings().presence;
+        self.as_mut().set_presence(presence);
         if let Some((server, token)) = development_session() {
             self.start_session(WsConnector::new(&server), token);
         } else {
@@ -164,6 +172,26 @@ impl qobject::PrBackend {
             to: to.to_string(),
             body: body.to_string(),
         });
+    }
+
+    pub fn set_presence_enabled(mut self: Pin<&mut Self>, enabled: bool) {
+        if *self.presence() == enabled {
+            return;
+        }
+        self.as_mut().set_presence(enabled);
+        runtime().spawn_blocking(move || crate::auth::remember_presence(enabled));
+        if !enabled {
+            // Stop announcing the last PR. This is the one message sent with presence off, and
+            // it only ever retracts.
+            self.try_send(ClientCommand::Presence { viewing: None });
+        }
+    }
+
+    pub fn viewing(self: Pin<&mut Self>, repo: &QString, number: i64) {
+        let pr = pr_ref(repo, number);
+        if let Some(command) = presence_command(*self.presence(), Some(pr)) {
+            self.try_send(command);
+        }
     }
 
     /// Tells the server a notification was read. If we are offline the server simply resends it
@@ -257,6 +285,20 @@ mod tests {
         let unique: std::collections::HashSet<_> = ids.iter().collect();
         assert_eq!(unique.len(), ids.len());
         assert!(ids.iter().all(|id| !id.is_empty() && id.len() <= 64));
+    }
+
+    #[test]
+    fn presence_is_never_sent_unless_the_user_turned_it_on() {
+        let pr = PrRef {
+            repo: "o/r".into(),
+            number: 1,
+        };
+        assert!(presence_command(false, Some(pr.clone())).is_none());
+        assert!(presence_command(false, None).is_none());
+        assert!(matches!(
+            presence_command(true, Some(pr)),
+            Some(ClientCommand::Presence { viewing: Some(_) })
+        ));
     }
 
     #[test]

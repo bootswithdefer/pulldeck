@@ -17,7 +17,7 @@ use std::pin::Pin;
 /// not be saved (the user is still signed in for this run).
 type Finished = Result<(SignIn, Option<String>), String>;
 
-fn load_settings() -> Settings {
+pub(crate) fn load_settings() -> Settings {
     let Some(path) = Settings::default_path() else {
         return Settings::default();
     };
@@ -32,6 +32,18 @@ fn remember_server(server: &ServerUrl) -> Result<(), String> {
     let mut settings = load_settings();
     settings.server_url = Some(server.url(""));
     settings.save_to(&path).map_err(|e| e.to_string())
+}
+
+/// Saves the presence choice, keeping every other setting.
+pub(crate) fn remember_presence(enabled: bool) {
+    let Some(path) = Settings::default_path() else {
+        return;
+    };
+    let mut settings = load_settings();
+    settings.presence = enabled;
+    if let Err(error) = settings.save_to(&path) {
+        tracing::warn!(%error, "could not save the presence setting");
+    }
 }
 
 /// Runs a blocking keyring call off the async workers.
