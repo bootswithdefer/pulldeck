@@ -1067,14 +1067,11 @@ dependencies = [
 name = "pulldeck"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "chrono",
  "cxx",
  "cxx-qt",
  "cxx-qt-build",
  "cxx-qt-lib",
  "pulldeck-core",
- "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -15,7 +15,6 @@ keywords = ["github", "pull-request", "qt", "gui", "desktop"]
 categories = ["development-tools", "gui"]
 
 [workspace.dependencies]
-anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 serde = { version = "1", features = ["derive"] }

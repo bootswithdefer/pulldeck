@@ -8,17 +8,17 @@ Rectangle {
     property string value: "none"
 
     readonly property var spec: ({
-        "review": {
-            "approved": ["Approved", "#2da44e"],
-            "changes_requested": ["Changes requested", "#cf222e"],
-            "review_required": ["Review needed", "#bf8700"]
-        },
-        "checks": {
-            "success": ["CI passing", "#2da44e"],
-            "failure": ["CI failing", "#cf222e"],
-            "pending": ["CI running", "#bf8700"]
-        }
-    })
+            "review": {
+                "approved": ["Approved", "#2da44e"],
+                "changes_requested": ["Changes requested", "#cf222e"],
+                "review_required": ["Review needed", "#bf8700"]
+            },
+            "checks": {
+                "success": ["CI passing", "#2da44e"],
+                "failure": ["CI failing", "#cf222e"],
+                "pending": ["CI running", "#bf8700"]
+            }
+        })
     readonly property var entry: spec[kind][value]
 
     visible: entry !== undefined
@@ -33,6 +33,6 @@ Rectangle {
         anchors.centerIn: parent
         text: badge.entry ? badge.entry[0] : ""
         color: badge.entry ? badge.entry[1] : palette.text
-        font.pointSize: Qt.application.font.pointSize - 1
+        font.pointSize: Application.font.pointSize - 1
     }
 }

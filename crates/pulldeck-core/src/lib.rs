@@ -6,6 +6,7 @@ pub mod auth;
 pub mod client;
 pub mod error;
 pub mod models;
+pub mod store;
 
 pub use client::GitHubClient;
 pub use error::{Error, Result};

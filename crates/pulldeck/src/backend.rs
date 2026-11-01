@@ -1,54 +1,163 @@
 //! The QObject that bridges the core crate to QML.
+//!
+//! `PrBackend` is a `QAbstractListModel`: QML binds a `ListView` straight to it and a refresh
+//! only inserts, removes or updates the rows that changed (see `pulldeck_core::store::diff`).
 
-use chrono::{DateTime, Utc};
-use cxx_qt::Threading;
-use cxx_qt_lib::QString;
+use cxx_qt::{CxxQtType, Threading};
+use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QVariant};
+use pulldeck_core::store::{self, Change};
 use pulldeck_core::{GitHubClient, PullRequest};
-use serde_json::{json, Value};
 use std::pin::Pin;
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 
-#[cxx_qt::bridge(namespace = "pulldeck")]
+#[cxx_qt::bridge]
 pub mod qobject {
-    #[namespace = ""]
+    unsafe extern "C++Qt" {
+        include!(<QtCore/QAbstractListModel>);
+        /// Base class of the model.
+        #[qobject]
+        type QAbstractListModel;
+    }
+
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+
+        include!("cxx-qt-lib/qhash.h");
+        type QHash_i32_QByteArray = cxx_qt_lib::QHash<cxx_qt_lib::QHashPair_i32_QByteArray>;
+
+        include!("cxx-qt-lib/qvariant.h");
+        type QVariant = cxx_qt_lib::QVariant;
+
+        include!("cxx-qt-lib/qmodelindex.h");
+        type QModelIndex = cxx_qt_lib::QModelIndex;
+
+        include!("cxx-qt-lib/qvector.h");
+        type QVector_i32 = cxx_qt_lib::QVector<i32>;
     }
 
     impl cxx_qt::Threading for PrBackend {}
 
     extern "RustQt" {
         #[qobject]
+        #[base = QAbstractListModel]
         #[qml_element]
-        #[qproperty(QString, prs_json, cxx_name = "prsJson")]
         #[qproperty(QString, status)]
         #[qproperty(QString, user)]
         #[qproperty(bool, loading)]
+        #[namespace = "pulldeck"]
         type PrBackend = super::PrBackendRust;
 
         /// Fetch the user's open PRs in the background.
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
+
+        /// Human-friendly age ("5m ago") of a Unix timestamp, relative to `now`.
+        #[qinvokable]
+        fn ago(self: &PrBackend, updated_at: i64, now: i64) -> QString;
+    }
+
+    // QAbstractListModel virtuals.
+    extern "RustQt" {
+        #[qinvokable]
+        #[cxx_override]
+        fn data(self: &PrBackend, index: &QModelIndex, role: i32) -> QVariant;
+
+        #[qinvokable]
+        #[cxx_override]
+        #[cxx_name = "roleNames"]
+        fn role_names(self: &PrBackend) -> QHash_i32_QByteArray;
+
+        #[qinvokable]
+        #[cxx_override]
+        #[cxx_name = "rowCount"]
+        fn row_count(self: &PrBackend, parent: &QModelIndex) -> i32;
+    }
+
+    // Notifications to attached views. Every begin_* must be paired with its end_*.
+    extern "RustQt" {
+        /// # Safety
+        ///
+        /// Must be followed by `end_insert_rows` once the row has been added.
+        #[inherit]
+        #[cxx_name = "beginInsertRows"]
+        unsafe fn begin_insert_rows(
+            self: Pin<&mut PrBackend>,
+            parent: &QModelIndex,
+            first: i32,
+            last: i32,
+        );
+        /// # Safety
+        ///
+        /// Pairs with `begin_insert_rows`.
+        #[inherit]
+        #[cxx_name = "endInsertRows"]
+        unsafe fn end_insert_rows(self: Pin<&mut PrBackend>);
+
+        /// # Safety
+        ///
+        /// Must be followed by `end_remove_rows` once the row has been removed.
+        #[inherit]
+        #[cxx_name = "beginRemoveRows"]
+        unsafe fn begin_remove_rows(
+            self: Pin<&mut PrBackend>,
+            parent: &QModelIndex,
+            first: i32,
+            last: i32,
+        );
+        /// # Safety
+        ///
+        /// Pairs with `begin_remove_rows`.
+        #[inherit]
+        #[cxx_name = "endRemoveRows"]
+        unsafe fn end_remove_rows(self: Pin<&mut PrBackend>);
+    }
+
+    unsafe extern "RustQt" {
+        /// Emitted when the data of existing rows changes.
+        #[inherit]
+        #[qsignal]
+        #[cxx_name = "dataChanged"]
+        fn data_changed(
+            self: Pin<&mut PrBackend>,
+            top_left: &QModelIndex,
+            bottom_right: &QModelIndex,
+            roles: &QVector_i32,
+        );
+
+        /// Model index for a row, needed to emit `dataChanged`.
+        #[inherit]
+        fn index(self: &PrBackend, row: i32, column: i32, parent: &QModelIndex) -> QModelIndex;
     }
 }
 
+// Role ids start at Qt::UserRole (0x100) so they never collide with Qt's built-in roles.
+const TITLE: i32 = 0x100;
+const REPO: i32 = 0x101;
+const NUMBER: i32 = 0x102;
+const URL: i32 = 0x103;
+const AUTHOR: i32 = 0x104;
+const IS_DRAFT: i32 = 0x105;
+const REVIEW: i32 = 0x106;
+const CHECKS: i32 = 0x107;
+const UPDATED_AT: i32 = 0x108;
+
 /// Backing state for [`qobject::PrBackend`].
 pub struct PrBackendRust {
-    prs_json: QString,
     status: QString,
     user: QString,
     loading: bool,
+    prs: Vec<PullRequest>,
 }
 
 impl Default for PrBackendRust {
     fn default() -> Self {
         Self {
-            prs_json: QString::from("[]"),
             status: QString::from("Not refreshed yet"),
             user: QString::default(),
             loading: false,
+            prs: Vec::new(),
         }
     }
 }
@@ -91,9 +200,7 @@ impl qobject::PrBackend {
                     Ok((login, prs)) => {
                         let status = format!("{} open PR{}", prs.len(), plural(prs.len()));
                         backend.as_mut().set_user(QString::from(login.as_str()));
-                        backend
-                            .as_mut()
-                            .set_prs_json(QString::from(to_json(&prs).as_str()));
+                        backend.as_mut().replace_prs(prs);
                         backend.as_mut().set_status(QString::from(status.as_str()));
                     }
                     Err(message) => {
@@ -108,6 +215,92 @@ impl qobject::PrBackend {
             }
         });
     }
+
+    /// Human-friendly age of `updated_at` (Unix seconds) at `now`.
+    pub fn ago(&self, updated_at: i64, now: i64) -> QString {
+        QString::from(age(now, updated_at).as_str())
+    }
+
+    /// Swaps in a new list, telling attached views about each inserted, removed or updated row
+    /// instead of resetting the whole model (so selection and scroll position survive).
+    fn replace_prs(mut self: Pin<&mut Self>, new: Vec<PullRequest>) {
+        let parent = QModelIndex::default();
+        let changes = store::diff(&self.prs, &new);
+        tracing::debug!(
+            rows = new.len(),
+            changes = changes.len(),
+            "applying refresh"
+        );
+        for change in changes {
+            match &change {
+                Change::Remove(row) => {
+                    let row = *row as i32;
+                    // SAFETY: paired with `end_remove_rows` below, with no early exit in between.
+                    unsafe { self.as_mut().begin_remove_rows(&parent, row, row) };
+                    change.apply(&mut self.as_mut().rust_mut().prs);
+                    unsafe { self.as_mut().end_remove_rows() };
+                }
+                Change::Insert(row, _) => {
+                    let row = *row as i32;
+                    // SAFETY: paired with `end_insert_rows` below, with no early exit in between.
+                    unsafe { self.as_mut().begin_insert_rows(&parent, row, row) };
+                    change.apply(&mut self.as_mut().rust_mut().prs);
+                    unsafe { self.as_mut().end_insert_rows() };
+                }
+                Change::Update(row, _) => {
+                    change.apply(&mut self.as_mut().rust_mut().prs);
+                    let index = self.index(*row as i32, 0, &parent);
+                    // An empty role list means "every role changed".
+                    self.as_mut()
+                        .data_changed(&index, &index, &Default::default());
+                }
+            }
+        }
+    }
+
+    pub fn row_count(&self, _parent: &QModelIndex) -> i32 {
+        self.prs.len() as i32
+    }
+
+    pub fn role_names(&self) -> QHash<QHashPair_i32_QByteArray> {
+        let mut roles = QHash::<QHashPair_i32_QByteArray>::default();
+        for (role, name) in [
+            (TITLE, "title"),
+            (REPO, "repo"),
+            (NUMBER, "number"),
+            (URL, "url"),
+            (AUTHOR, "author"),
+            (IS_DRAFT, "isDraft"),
+            (REVIEW, "review"),
+            (CHECKS, "checks"),
+            (UPDATED_AT, "updatedAt"),
+        ] {
+            roles.insert(role, QByteArray::from(name));
+        }
+        roles
+    }
+
+    pub fn data(&self, index: &QModelIndex, role: i32) -> QVariant {
+        let Some(pr) = usize::try_from(index.row())
+            .ok()
+            .and_then(|row| self.prs.get(row))
+        else {
+            return QVariant::default();
+        };
+        let text = |s: &str| QVariant::from(&QString::from(s));
+        match role {
+            TITLE => text(&pr.title),
+            REPO => text(&pr.repo),
+            NUMBER => QVariant::from(&(pr.number as i64)),
+            URL => text(&pr.url),
+            AUTHOR => text(&pr.author),
+            IS_DRAFT => QVariant::from(&pr.is_draft),
+            REVIEW => text(pr.review.as_str()),
+            CHECKS => text(pr.checks.as_str()),
+            UPDATED_AT => QVariant::from(&pr.updated_at.timestamp()),
+            _ => QVariant::default(),
+        }
+    }
 }
 
 fn plural(n: usize) -> &'static str {
@@ -118,22 +311,9 @@ fn plural(n: usize) -> &'static str {
     }
 }
 
-/// Serializes PRs for QML, adding a human-friendly age.
-fn to_json(prs: &[PullRequest]) -> String {
-    let now = Utc::now();
-    let rows: Vec<Value> = prs
-        .iter()
-        .map(|pr| {
-            let mut row = serde_json::to_value(pr).unwrap_or(Value::Null);
-            row["updated_ago"] = json!(ago(now, pr.updated_at));
-            row
-        })
-        .collect();
-    Value::Array(rows).to_string()
-}
-
-fn ago(now: DateTime<Utc>, then: DateTime<Utc>) -> String {
-    let secs = (now - then).num_seconds().max(0);
+/// "5m ago"-style age of `then` at `now` (both Unix seconds); never negative.
+fn age(now: i64, then: i64) -> String {
+    let secs = (now - then).max(0);
     match secs {
         0..=59 => "just now".into(),
         60..=3599 => format!("{}m ago", secs / 60),
@@ -147,12 +327,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ago_buckets() {
-        let now: DateTime<Utc> = "2026-10-31T12:00:00Z".parse().unwrap();
-        let at = |s: &str| ago(now, s.parse().unwrap());
-        assert_eq!(at("2026-10-31T11:59:59Z"), "just now");
-        assert_eq!(at("2026-10-31T11:15:00Z"), "45m ago");
-        assert_eq!(at("2026-10-31T07:00:00Z"), "5h ago");
-        assert_eq!(at("2026-10-28T12:00:00Z"), "3d ago");
+    fn age_buckets() {
+        let now = 1_000_000;
+        assert_eq!(age(now, now - 59), "just now");
+        assert_eq!(age(now, now - 45 * 60), "45m ago");
+        assert_eq!(age(now, now - 5 * 3600), "5h ago");
+        assert_eq!(age(now, now - 3 * 86400), "3d ago");
+    }
+
+    #[test]
+    fn age_of_a_future_timestamp_is_just_now() {
+        assert_eq!(age(100, 500), "just now");
+    }
+
+    #[test]
+    fn plural_forms() {
+        assert_eq!(plural(1), "");
+        assert_eq!(plural(0), "s");
+        assert_eq!(plural(2), "s");
     }
 }

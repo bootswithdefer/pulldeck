@@ -18,6 +18,16 @@ pub enum ReviewStatus {
 }
 
 impl ReviewStatus {
+    /// Stable snake_case name, as used by the UI.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::ChangesRequested => "changes_requested",
+            Self::ReviewRequired => "review_required",
+            Self::None => "none",
+        }
+    }
+
     pub(crate) fn from_graphql(value: Option<&str>) -> Self {
         match value {
             Some("APPROVED") => Self::Approved,
@@ -43,6 +53,16 @@ pub enum ChecksStatus {
 }
 
 impl ChecksStatus {
+    /// Stable snake_case name, as used by the UI.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Failure => "failure",
+            Self::Pending => "pending",
+            Self::None => "none",
+        }
+    }
+
     pub(crate) fn from_graphql(value: Option<&str>) -> Self {
         match value {
             Some("SUCCESS") => Self::Success,
@@ -74,4 +94,30 @@ pub struct PullRequest {
     pub checks: ChecksStatus,
     /// Last update time.
     pub updated_at: DateTime<Utc>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The UI matches on these names, and they must agree with the serialized form.
+    #[test]
+    fn status_names_match_their_serialized_form() {
+        for status in [
+            ReviewStatus::Approved,
+            ReviewStatus::ChangesRequested,
+            ReviewStatus::ReviewRequired,
+            ReviewStatus::None,
+        ] {
+            assert_eq!(serde_json::to_value(status).unwrap(), status.as_str());
+        }
+        for status in [
+            ChecksStatus::Success,
+            ChecksStatus::Failure,
+            ChecksStatus::Pending,
+            ChecksStatus::None,
+        ] {
+            assert_eq!(serde_json::to_value(status).unwrap(), status.as_str());
+        }
+    }
 }

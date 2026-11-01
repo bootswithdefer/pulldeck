@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,9 +13,12 @@ ApplicationWindow {
     title: backend.user ? qsTr("pulldeck — %1").arg(backend.user) : qsTr("pulldeck")
     color: palette.window
 
-    PrBackend { id: backend }
+    PrBackend {
+        id: backend
+    }
 
-    readonly property var prs: JSON.parse(backend.prsJson)
+    // Unix seconds, ticked so the "5m ago" labels stay current between refreshes.
+    property real now: Date.now() / 1000
 
     Component.onCompleted: backend.refresh()
 
@@ -22,6 +27,13 @@ ApplicationWindow {
         running: true
         repeat: true
         onTriggered: backend.refresh()
+    }
+
+    Timer {
+        interval: 30000
+        running: true
+        repeat: true
+        onTriggered: root.now = Date.now() / 1000
     }
 
     header: ToolBar {
@@ -58,7 +70,7 @@ ApplicationWindow {
         id: list
         anchors.fill: parent
         clip: true
-        model: root.prs
+        model: backend
         spacing: 1
         ScrollBar.vertical: ScrollBar {}
 
@@ -71,9 +83,18 @@ ApplicationWindow {
 
         delegate: ItemDelegate {
             id: row
-            required property var modelData
+            // One per role exposed by PrBackend (see role_names in backend.rs).
+            required property string title
+            required property string repo
+            required property int number
+            required property string url
+            required property string author
+            required property bool isDraft
+            required property string review
+            required property string checks
+            required property real updatedAt
             width: ListView.view.width
-            onClicked: Qt.openUrlExternally(modelData.url)
+            onClicked: Qt.openUrlExternally(row.url)
 
             contentItem: RowLayout {
                 spacing: 12
@@ -83,28 +104,28 @@ ApplicationWindow {
                     Layout.fillWidth: true
 
                     Label {
-                        text: (row.modelData.is_draft ? qsTr("[draft] ") : "") + row.modelData.title
+                        text: (row.isDraft ? qsTr("[draft] ") : "") + row.title
                         font.bold: true
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
                     Label {
-                        text: row.modelData.repo + " #" + row.modelData.number
+                        text: row.repo + " #" + row.number
                         opacity: 0.65
-                        font.pointSize: Qt.application.font.pointSize - 1
+                        font.pointSize: Application.font.pointSize - 1
                     }
                 }
 
                 Badge {
                     kind: "review"
-                    value: row.modelData.review
+                    value: row.review
                 }
                 Badge {
                     kind: "checks"
-                    value: row.modelData.checks
+                    value: row.checks
                 }
                 Label {
-                    text: row.modelData.updated_ago
+                    text: backend.ago(row.updatedAt, root.now)
                     opacity: 0.6
                     Layout.minimumWidth: 70
                     horizontalAlignment: Text.AlignRight
