@@ -48,7 +48,16 @@ fn main() {
     let mut app = QGuiApplication::new();
     let mut engine = QQmlApplicationEngine::new();
 
-    if let Some(engine) = engine.as_mut() {
+    if let Some(mut engine) = engine.as_mut() {
+        // A QML error would otherwise leave an event loop running with no window and no message.
+        engine
+            .as_mut()
+            .on_object_creation_failed(|_, url| {
+                eprintln!("pulldeck: could not load the UI from {url}");
+                eprintln!("Run with QT_LOGGING_RULES='qt.qml*=true' for the QML errors.");
+                std::process::exit(1);
+            })
+            .release();
         engine.load(&QUrl::from(
             "qrc:/qt/qml/io/github/bootswithdefer/pulldeck/qml/main.qml",
         ));
