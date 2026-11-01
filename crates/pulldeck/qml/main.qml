@@ -102,8 +102,7 @@ ApplicationWindow {
             }
             ToolButton {
                 text: qsTr("Refresh")
-                // The server pushes changes, so there is nothing to refresh by hand.
-                visible: !backend.serverConfigured
+                // The server pushes changes, but not for repositories it cannot see.
                 enabled: !backend.loading
                 onClicked: backend.refresh()
             }
@@ -188,6 +187,7 @@ ApplicationWindow {
                     required property string review
                     required property string checks
                     required property real updatedAt
+                    required property bool serverBacked
                     width: ListView.view.width
                     onClicked: {
                         backend.viewing(row.repo, row.number);
@@ -231,7 +231,8 @@ ApplicationWindow {
                         // Collaboration actions need a server session.
                         ToolButton {
                             text: "⋯"
-                            visible: backend.auth === "signedIn"
+                            // Only pull requests the server tracks can take its actions.
+                            visible: backend.auth === "signedIn" && row.serverBacked
                             enabled: backend.connection === "live"
                             onClicked: menu.popup()
 

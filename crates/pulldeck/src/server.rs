@@ -117,14 +117,16 @@ impl qobject::PrBackend {
         let presence = crate::auth::load_settings().presence;
         self.as_mut().set_presence(presence);
         if let Some((server, token)) = development_session() {
+            // A development server has fake accounts; keep real pull requests out of its list.
+            self.as_mut().rust_mut().poll = false;
             self.start_session(WsConnector::new(&server), token);
         } else {
             self.resume_saved_session();
         }
     }
 
-    /// Starts a server session. From here on the server owns the PR list and `refresh()` does
-    /// nothing.
+    /// Starts a server session. Its pull requests are merged with the ones found by polling
+    /// GitHub, and win where both have the same one.
     pub(crate) fn start_session<C>(mut self: Pin<&mut Self>, connector: C, token: SessionToken)
     where
         C: Connector + 'static,
@@ -260,7 +262,7 @@ async fn forward(
                 backend.queue(move |mut b| b.as_mut().set_user(QString::from(login.as_str())))
             }
             SessionUpdate::Changes(changes) => backend.queue(move |mut b| {
-                b.as_mut().apply_changes(changes);
+                b.as_mut().apply_server_changes(changes);
                 let status = open_prs_status(b.pr_count());
                 tracing::debug!(rows = b.pr_count(), "list updated from server");
                 b.as_mut().set_status(QString::from(status.as_str()));

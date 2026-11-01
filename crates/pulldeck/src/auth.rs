@@ -8,7 +8,6 @@ use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use pulldeck_core::login::{LoginClient, SignIn};
 use pulldeck_core::settings::{ServerUrl, Settings};
-use pulldeck_core::store::Change;
 use pulldeck_core::tokens::{KeyringTokenStore, TokenStore};
 use pulldeck_core::ws::WsConnector;
 use std::pin::Pin;
@@ -251,9 +250,8 @@ impl qobject::PrBackend {
         self.as_mut().set_connection(QString::from("offline"));
         self.as_mut().set_auth(QString::from("signedOut"));
         self.as_mut().set_user(QString::default());
-        let rows = self.pr_count();
-        self.as_mut()
-            .apply_changes((0..rows).rev().map(Change::Remove).collect());
+        // The server's pull requests go; anything found by polling stays.
+        self.as_mut().clear_server_prs();
         if let Some(inbox) = self.inbox.clone() {
             let _ = inbox.queue(|i| i.reset());
         }

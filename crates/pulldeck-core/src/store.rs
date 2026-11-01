@@ -75,10 +75,55 @@ pub fn diff(current: &[PullRequest], new: &[PullRequest]) -> Vec<Change> {
     changes
 }
 
+/// The list to show when pull requests come from two places: a server (which tracks only the
+/// repositories its GitHub App is installed on) and the client's own polling of GitHub.
+///
+/// A pull request in both appears once, as the server's copy. The result is most recently
+/// updated first; on a tie, server copies come first and each source keeps its own order.
+pub fn merge(server: &[PullRequest], polled: &[PullRequest]) -> Vec<PullRequest> {
+    let mut merged: Vec<PullRequest> = server.to_vec();
+    merged.extend(
+        polled
+            .iter()
+            .filter(|p| !server.iter().any(|s| same(s, p)))
+            .cloned(),
+    );
+    merged.sort_by_key(|p| std::cmp::Reverse(p.updated_at));
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{ChecksStatus, ReviewStatus};
+
+    #[test]
+    fn merge_dedupes_preferring_the_server_and_sorts_newest_first() {
+        let at = |s: &str| s.parse().unwrap();
+        let mut server_copy = pr(1, "from the server");
+        server_copy.updated_at = at("2026-01-02T00:00:00Z");
+        let mut polled_copy = pr(1, "from polling");
+        polled_copy.updated_at = at("2026-01-05T00:00:00Z");
+        let mut only_polled = pr(2, "asu");
+        only_polled.updated_at = at("2026-01-03T00:00:00Z");
+        let mut older = pr(3, "older");
+        older.updated_at = at("2026-01-01T00:00:00Z");
+
+        let merged = merge(
+            &[older.clone(), server_copy.clone()],
+            &[polled_copy, only_polled.clone()],
+        );
+
+        assert_eq!(merged, vec![only_polled, server_copy, older]);
+    }
+
+    #[test]
+    fn merge_with_one_empty_side_is_the_other_side() {
+        let list = vec![pr(1, "a"), pr(2, "b")];
+        assert_eq!(merge(&list, &[]), list);
+        assert_eq!(merge(&[], &list), list);
+        assert!(merge(&[], &[]).is_empty());
+    }
 
     fn pr(number: u64, title: &str) -> PullRequest {
         PullRequest {

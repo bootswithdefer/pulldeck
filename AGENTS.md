@@ -23,6 +23,11 @@ pulldeck: a Rust + Qt (cxx-qt 0.10, QML) app that tracks the user's GitHub PRs.
 
 ## Rules
 
+- The pulldeck server is optional. The app always works standalone by polling GitHub itself; a
+  server session adds live updates and collaboration. `PrBackend` keeps the server's pull requests
+  and the polled ones as separate lists and shows `store::merge` of them (the server's copy wins),
+  and only server-backed rows (`serverBacked`) offer server actions. Never let one source
+  overwrite the other.
 - No HTTP or subprocess on the Qt thread: spawn on the tokio runtime, return via `qt_thread().queue`.
 - `just check` must pass: rustfmt, clippy (`-D warnings`), tests, `qmlformat` and `qmllint`
   (warnings are errors). `just ci` adds `cargo deny`.

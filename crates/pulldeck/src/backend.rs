@@ -9,6 +9,7 @@ use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QStri
 use pulldeck_core::session::ClientCommand;
 use pulldeck_core::store::{self, Change};
 use pulldeck_core::{GitHubClient, PullRequest};
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
@@ -71,8 +72,8 @@ pub mod qobject {
         #[namespace = "pulldeck"]
         type PrBackend = super::PrBackendRust;
 
-        /// Fetch the user's open PRs in the background. Does nothing when a server session owns
-        /// the list.
+        /// Fetch the user's open PRs from GitHub in the background. Works with or without a
+        /// server session; the results are merged with what the server tracks.
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
 
@@ -322,6 +323,7 @@ const IS_DRAFT: i32 = 0x105;
 const REVIEW: i32 = 0x106;
 const CHECKS: i32 = 0x107;
 const UPDATED_AT: i32 = 0x108;
+const SERVER_BACKED: i32 = 0x109;
 
 /// Backing state for [`qobject::PrBackend`].
 pub struct PrBackendRust {
@@ -342,7 +344,17 @@ pub struct PrBackendRust {
     pub(crate) login_task: Option<tokio::task::AbortHandle>,
     /// The running session's tasks, stopped on sign-out.
     pub(crate) session_tasks: Vec<tokio::task::AbortHandle>,
+    /// What is shown: `server` and `polled` merged (see `store::merge`).
     prs: Vec<PullRequest>,
+    /// Pull requests the server tracks. Empty without a session.
+    server: Vec<PullRequest>,
+    /// Pull requests found by polling GitHub directly, including ones the server cannot see.
+    polled: Vec<PullRequest>,
+    /// Which shown rows the server tracks; only those can take server actions.
+    backed: HashSet<(String, u64)>,
+    /// Whether to poll GitHub. Off for the demo and for a development server, so that fake
+    /// accounts are not mixed with real pull requests.
+    pub(crate) poll: bool,
     /// Commands for the server session, once one is running.
     pub(crate) commands: Option<tokio::sync::mpsc::Sender<ClientCommand>>,
     /// Where server notifications go. In an `Arc` because cxx-qt needs this struct to be `Unpin`
@@ -369,6 +381,10 @@ impl Default for PrBackendRust {
             login_task: None,
             session_tasks: Vec::new(),
             prs: Vec::new(),
+            server: Vec::new(),
+            polled: Vec::new(),
+            backed: HashSet::new(),
+            poll: true,
             commands: None,
             inbox: None,
         }
@@ -399,8 +415,9 @@ async fn fetch() -> Fetched {
 impl qobject::PrBackend {
     /// Starts a background fetch; no-op if one is already running.
     pub fn refresh(mut self: Pin<&mut Self>) {
-        // With a server session the server owns the list; polling GitHub as well would fight it.
-        if *self.loading() || self.commands.is_some() {
+        // Polling works with or without a server: the server only sees repositories its GitHub
+        // App is installed on, and gives live updates for those.
+        if *self.loading() || !self.poll {
             return;
         }
         self.as_mut().set_loading(true);
@@ -412,9 +429,12 @@ impl qobject::PrBackend {
             let queued = qt_thread.queue(move |mut backend| {
                 match result {
                     Ok((login, prs)) => {
-                        let status = open_prs_status(prs.len());
-                        backend.as_mut().set_user(QString::from(login.as_str()));
-                        backend.as_mut().replace_prs(prs);
+                        // A server session knows who you are better than a token on this machine.
+                        if !*backend.server_configured() {
+                            backend.as_mut().set_user(QString::from(login.as_str()));
+                        }
+                        backend.as_mut().replace_polled(prs);
+                        let status = open_prs_status(backend.pr_count());
                         backend.as_mut().set_status(QString::from(status.as_str()));
                     }
                     Err(message) => {
@@ -435,16 +455,56 @@ impl qobject::PrBackend {
         QString::from(age(now, updated_at).as_str())
     }
 
-    /// Swaps in a new list, telling attached views about each inserted, removed or updated row
-    /// instead of resetting the whole model (so selection and scroll position survive).
-    fn replace_prs(self: Pin<&mut Self>, new: Vec<PullRequest>) {
-        let changes = store::diff(&self.prs, &new);
+    /// Stores a fresh poll of GitHub and updates what is shown.
+    fn replace_polled(mut self: Pin<&mut Self>, polled: Vec<PullRequest>) {
+        self.as_mut().rust_mut().polled = polled;
+        self.rebuild();
+    }
+
+    /// Applies row changes from the server session to the server's list and updates what is
+    /// shown. The changes are relative to the server's list, not to what is displayed.
+    pub(crate) fn apply_server_changes(mut self: Pin<&mut Self>, changes: Vec<Change>) {
+        for change in &changes {
+            change.apply(&mut self.as_mut().rust_mut().server);
+        }
+        self.rebuild();
+    }
+
+    /// Forgets everything the server told us (sign-out); polled pull requests stay.
+    pub(crate) fn clear_server_prs(mut self: Pin<&mut Self>) {
+        self.as_mut().rust_mut().server.clear();
+        self.rebuild();
+    }
+
+    /// Recomputes the merged list and tells attached views about each inserted, removed or
+    /// updated row instead of resetting the whole model (so selection and scroll survive).
+    fn rebuild(mut self: Pin<&mut Self>) {
+        let merged = store::merge(&self.server, &self.polled);
+        let backed: HashSet<_> = self
+            .server
+            .iter()
+            .map(|p| (p.repo.clone(), p.number))
+            .collect();
+        let previously_backed = std::mem::replace(&mut self.as_mut().rust_mut().backed, backed);
+        let changes = store::diff(&self.prs, &merged);
         tracing::debug!(
-            rows = new.len(),
+            rows = merged.len(),
             changes = changes.len(),
-            "applying refresh"
+            "applying list update"
         );
-        self.apply_changes(changes);
+        self.as_mut().apply_changes(changes);
+
+        // A row can move between "server tracks it" and "only polled" with no change to the
+        // pull request itself, which the diff cannot see.
+        let parent = QModelIndex::default();
+        for row in 0..self.prs.len() {
+            let key = (self.prs[row].repo.clone(), self.prs[row].number);
+            if previously_backed.contains(&key) != self.backed.contains(&key) {
+                let index = self.index(row as i32, 0, &parent);
+                self.as_mut()
+                    .data_changed(&index, &index, &Default::default());
+            }
+        }
     }
 
     /// Applies row changes in order, notifying attached views of each one. Both the local refresh
@@ -500,6 +560,7 @@ impl qobject::PrBackend {
             (REVIEW, "review"),
             (CHECKS, "checks"),
             (UPDATED_AT, "updatedAt"),
+            (SERVER_BACKED, "serverBacked"),
         ] {
             roles.insert(role, QByteArray::from(name));
         }
@@ -524,6 +585,7 @@ impl qobject::PrBackend {
             REVIEW => text(pr.review.as_str()),
             CHECKS => text(pr.checks.as_str()),
             UPDATED_AT => QVariant::from(&pr.updated_at.timestamp()),
+            SERVER_BACKED => QVariant::from(&self.backed.contains(&(pr.repo.clone(), pr.number))),
             _ => QVariant::default(),
         }
     }

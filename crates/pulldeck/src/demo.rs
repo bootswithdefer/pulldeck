@@ -4,7 +4,7 @@
 
 use crate::backend::{qobject, runtime};
 use chrono::{Duration as ChronoDuration, Utc};
-use cxx_qt::Threading;
+use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use pulldeck_core::remote::{Connector, Transport, TransportError};
 use pulldeck_core::session::{
@@ -20,6 +20,8 @@ use tokio::time::sleep;
 pub(crate) fn start(mut backend: Pin<&mut qobject::PrBackend>) {
     let inbox = backend.inbox.clone();
     let ui = backend.qt_thread();
+    // Only the scripted server's pull requests: not whatever `gh` can see.
+    backend.as_mut().rust_mut().poll = false;
     backend
         .as_mut()
         .start_session(DemoConnector::default(), SessionToken::new("demo"));
