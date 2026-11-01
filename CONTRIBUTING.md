@@ -2,21 +2,31 @@
 
 ## Setup
 
-You need a recent stable Rust toolchain, Qt 6 (base + declarative) and an authenticated
+You need Qt 6 (base, declarative and its tools), the dev tools below and an authenticated
 [`gh`](https://cli.github.com/) CLI.
+
+**Dev tools (Rust, just, prek, cargo-deny, git-cliff, pinact, …)** are pinned in `mise.toml`:
+
+```bash
+mise install
+```
+
+**Qt 6** is a system library:
 
 ```bash
 # Arch
 sudo pacman -S qt6-base qt6-declarative qt6-svg
 # Debian/Ubuntu
-sudo apt install qt6-base-dev qt6-declarative-dev libgl1-mesa-dev \
+sudo apt install qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools libgl1-mesa-dev \
   qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates
 ```
 
 ## Workflow
 
 ```bash
-just check   # fmt, clippy (warnings are errors), tests
+just check   # rustfmt, clippy (warnings are errors), tests, qmlformat, qmllint
+just ci      # the above plus cargo-deny: everything CI runs
+just qml-fmt # format the QML in place
 just run     # launch the app
 just list    # headless: print your PRs via the core crate
 ```
