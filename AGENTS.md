@@ -7,7 +7,12 @@ pulldeck: a Rust + Qt (cxx-qt 0.10, QML) app that tracks the user's GitHub PRs.
 - `crates/pulldeck-core` — UI-free: `auth` (env or `gh auth token`), `client` (GraphQL, paginated),
   `models`, and `store::diff`, which turns an old and new PR list into per-row `Change`s
   (Insert/Remove/Update). Parsing and the diff are unit-tested; the diff test is exhaustive over
-  all small list transitions.
+  all small list transitions. `session` holds the client's replica of server state (PR list, inbox,
+  resume point) as pure, synchronous code over domain types (`ServerEvent`, `ClientCommand`) that
+  are independent of the wire format. `remote` is the connection driver (`RemoteSession`: sign-in,
+  resume, reconnect with backoff, refusing actions while offline) behind `Transport`/`Connector`
+  traits, tested with a fake transport on a paused clock. A real websocket transport converts
+  between protocol messages and the domain types and validates commands before sending.
 - `crates/pulldeck` — Qt app. `src/backend.rs` is `PrBackend`, a `QAbstractListModel` (roles
   `title`, `repo`, `number`, `url`, `author`, `isDraft`, `review`, `checks`, `updatedAt`;
   properties `status`, `user`, `loading`; invokables `refresh()`, `ago()`). A refresh applies the
@@ -22,7 +27,12 @@ pulldeck: a Rust + Qt (cxx-qt 0.10, QML) app that tracks the user's GitHub PRs.
 - `just check` must pass: rustfmt, clippy (`-D warnings`), tests, `qmlformat` and `qmllint`
   (warnings are errors). `just ci` adds `cargo deny`.
 - Run Qt tools through `scripts/qt-tool`: a bare `qmllint` can be Qt 5's, which silently checks nothing.
-- Never log or persist tokens.
+- Tokens never appear in logs, `Debug` output or error messages (`SessionToken` redacts itself and
+  is not `Display`). The client persists at most the opaque server-issued session token, in the OS
+  keyring, never in plain config; it never sees or stores a GitHub token. The server may persist
+  GitHub tokens only encrypted at rest.
+- Presence (telling others which PR you are viewing) is opt-in and off by default; the client
+  simply never sends it unless the user turned it on.
 
 ## Commits & releases
 
