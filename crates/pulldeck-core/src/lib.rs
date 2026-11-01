@@ -8,7 +8,9 @@ pub mod error;
 pub mod models;
 pub mod remote;
 pub mod session;
+pub mod settings;
 pub mod store;
+pub mod tokens;
 
 pub use client::GitHubClient;
 pub use error::{Error, Result};
