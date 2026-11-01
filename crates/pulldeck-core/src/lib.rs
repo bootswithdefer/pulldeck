@@ -6,6 +6,8 @@ pub mod auth;
 pub mod client;
 pub mod error;
 pub mod models;
+pub mod remote;
+pub mod session;
 pub mod store;
 
 pub use client::GitHubClient;
