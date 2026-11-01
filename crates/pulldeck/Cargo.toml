@@ -12,7 +12,13 @@ keywords.workspace = true
 categories.workspace = true
 build = "build.rs"
 
+[features]
+# A scripted fake server for developing the collaboration UI (see src/demo.rs, `just demo`).
+# Off by default: never part of a release build.
+demo = ["dep:chrono"]
+
 [dependencies]
+chrono = { workspace = true, optional = true }
 cxx.workspace = true
 cxx-qt.workspace = true
 cxx-qt-lib.workspace = true

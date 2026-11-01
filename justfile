@@ -8,6 +8,10 @@ default:
 run:
     cargo run -p pulldeck
 
+# Run against a scripted fake server, to try the collaboration UI without a real one
+demo:
+    PULLDECK_DEMO=1 cargo run -p pulldeck --features demo
+
 # Print your open PRs without the UI
 list:
     cargo run -q -p pulldeck-core --example list
@@ -56,7 +60,7 @@ fmt-check:
 
 # Lint with clippy; warnings are errors
 clippy:
-    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # Apply clippy's automatic fixes, then format
 fix:
@@ -65,7 +69,7 @@ fix:
 
 # Run all unit tests
 test:
-    cargo test --workspace
+    cargo test --workspace --all-features
 
 # Lint the QML; warnings are errors. Uses the app's generated types, so it builds first if needed
 qml-lint:

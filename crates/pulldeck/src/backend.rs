@@ -6,6 +6,7 @@
 use crate::inbox::InboxModelRust;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QVariant};
+use pulldeck_core::session::ClientCommand;
 use pulldeck_core::store::{self, Change};
 use pulldeck_core::{GitHubClient, PullRequest};
 use std::pin::Pin;
@@ -47,16 +48,63 @@ pub mod qobject {
         #[qproperty(QString, status)]
         #[qproperty(QString, user)]
         #[qproperty(bool, loading)]
+        /// "offline" without a server, otherwise "connecting", "live", "disconnected" or "failed".
+        #[qproperty(QString, connection)]
+        #[qproperty(bool, server_configured, cxx_name = "serverConfigured")]
         #[namespace = "pulldeck"]
         type PrBackend = super::PrBackendRust;
 
-        /// Fetch the user's open PRs in the background.
+        /// Fetch the user's open PRs in the background. Does nothing when a server session owns
+        /// the list.
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
 
         /// Human-friendly age ("5m ago") of a Unix timestamp, relative to `now`.
         #[qinvokable]
         fn ago(self: &PrBackend, updated_at: i64, now: i64) -> QString;
+
+        /// Ask the server to request a review from `to` on a PR.
+        #[qinvokable]
+        #[cxx_name = "requestReview"]
+        fn request_review(self: Pin<&mut Self>, repo: &QString, number: i64, to: &QString);
+
+        /// Send `to` a reminder about a PR (recorded by the server, not posted to GitHub).
+        #[qinvokable]
+        fn nudge(self: Pin<&mut Self>, repo: &QString, number: i64, to: &QString, note: &QString);
+
+        /// Send `to` an in-app message about a PR (not a GitHub comment).
+        #[qinvokable]
+        #[cxx_name = "sendMessage"]
+        fn send_message(
+            self: Pin<&mut Self>,
+            repo: &QString,
+            number: i64,
+            to: &QString,
+            body: &QString,
+        );
+
+        /// Tell the server a notification has been read.
+        #[qinvokable]
+        #[cxx_name = "ackNotification"]
+        fn ack_notification(self: Pin<&mut Self>, id: i64);
+
+        /// The outcome of a request review, nudge or message.
+        #[qsignal]
+        #[cxx_name = "actionResult"]
+        fn action_result(self: Pin<&mut Self>, request_id: QString, ok: bool, message: QString);
+    }
+
+    // Qt's meta-type system rejects a `Q_INVOKABLE` taking a non-const QObject reference, so the
+    // inbox arrives as a pointer (which QML passes naturally), hence `unsafe`.
+    unsafe extern "RustQt" {
+        /// Give the backend the inbox so notifications from the server can reach it.
+        ///
+        /// # Safety
+        ///
+        /// `inbox` must be null or point to a live `InboxModel`.
+        #[qinvokable]
+        #[cxx_name = "attachInbox"]
+        unsafe fn attach_inbox(self: Pin<&mut PrBackend>, inbox: *mut InboxModel);
     }
 
     // QAbstractListModel virtuals.
@@ -228,7 +276,14 @@ pub struct PrBackendRust {
     status: QString,
     user: QString,
     loading: bool,
+    connection: QString,
+    server_configured: bool,
     prs: Vec<PullRequest>,
+    /// Commands for the server session, once one is running.
+    pub(crate) commands: Option<tokio::sync::mpsc::Sender<ClientCommand>>,
+    /// Where server notifications go. In an `Arc` because cxx-qt needs this struct to be `Unpin`
+    /// and a bare `CxxQtThread` is not.
+    pub(crate) inbox: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::InboxModel>>>,
 }
 
 impl Default for PrBackendRust {
@@ -237,12 +292,16 @@ impl Default for PrBackendRust {
             status: QString::from("Not refreshed yet"),
             user: QString::default(),
             loading: false,
+            connection: QString::from("offline"),
+            server_configured: false,
             prs: Vec::new(),
+            commands: None,
+            inbox: None,
         }
     }
 }
 
-fn runtime() -> &'static Runtime {
+pub(crate) fn runtime() -> &'static Runtime {
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
@@ -266,7 +325,8 @@ async fn fetch() -> Fetched {
 impl qobject::PrBackend {
     /// Starts a background fetch; no-op if one is already running.
     pub fn refresh(mut self: Pin<&mut Self>) {
-        if *self.loading() {
+        // With a server session the server owns the list; polling GitHub as well would fight it.
+        if *self.loading() || self.commands.is_some() {
             return;
         }
         self.as_mut().set_loading(true);
@@ -278,7 +338,7 @@ impl qobject::PrBackend {
             let queued = qt_thread.queue(move |mut backend| {
                 match result {
                     Ok((login, prs)) => {
-                        let status = format!("{} open PR{}", prs.len(), plural(prs.len()));
+                        let status = open_prs_status(prs.len());
                         backend.as_mut().set_user(QString::from(login.as_str()));
                         backend.as_mut().replace_prs(prs);
                         backend.as_mut().set_status(QString::from(status.as_str()));
@@ -316,7 +376,14 @@ impl qobject::PrBackend {
     /// Applies row changes in order, notifying attached views of each one. Both the local refresh
     /// (which diffs a fresh fetch) and a server session (which sends changes already computed
     /// against its replica) end up here.
-    fn apply_changes(mut self: Pin<&mut Self>, changes: Vec<Change>) {
+    /// How many PRs the list currently holds.
+    // Used by the server session glue, which only runs with the demo or a real transport.
+    #[cfg_attr(not(feature = "demo"), allow(dead_code))]
+    pub(crate) fn pr_count(&self) -> usize {
+        self.prs.len()
+    }
+
+    pub(crate) fn apply_changes(mut self: Pin<&mut Self>, changes: Vec<Change>) {
         let parent = QModelIndex::default();
         for change in changes {
             match &change {
@@ -388,6 +455,11 @@ impl qobject::PrBackend {
             _ => QVariant::default(),
         }
     }
+}
+
+/// "3 open PRs" / "1 open PR", shown in the toolbar.
+pub(crate) fn open_prs_status(count: usize) -> String {
+    format!("{count} open PR{}", plural(count))
 }
 
 fn plural(n: usize) -> &'static str {

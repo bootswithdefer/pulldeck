@@ -68,8 +68,8 @@ hooks = [
 
   # Slower: only before pushing.
   { id = "qmllint", name = "qmllint (warnings are errors)", language = "system", entry = "just qml-lint", files = '\.qml$', pass_filenames = false, stages = ["pre-push"] },
-  { id = "cargo-clippy", name = "cargo clippy -D warnings", language = "system", entry = "cargo clippy --workspace --all-targets -- -D warnings", files = '\.(rs|toml)$', pass_filenames = false, stages = ["pre-push"] },
-  { id = "cargo-test", name = "cargo test", language = "system", entry = "cargo test --workspace", files = '\.(rs|toml)$', pass_filenames = false, stages = ["pre-push"] },
+  { id = "cargo-clippy", name = "cargo clippy -D warnings", language = "system", entry = "cargo clippy --workspace --all-targets --all-features -- -D warnings", files = '\.(rs|toml)$', pass_filenames = false, stages = ["pre-push"] },
+  { id = "cargo-test", name = "cargo test", language = "system", entry = "cargo test --workspace --all-features", files = '\.(rs|toml)$', pass_filenames = false, stages = ["pre-push"] },
   { id = "cargo-deny", name = "cargo deny check", language = "system", entry = "cargo deny check", files = '(^|/)(Cargo\.(toml|lock)|deny\.toml)$', pass_filenames = false, stages = ["pre-push"] },
 
   # Keep action pins honest (see `just pin`).

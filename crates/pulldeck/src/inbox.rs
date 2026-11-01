@@ -53,7 +53,12 @@ impl qobject::InboxModel {
         };
         self.as_mut().rust_mut().inbox.insert(notification);
         unsafe { self.as_mut().end_insert_rows() };
-        self.refresh_unread();
+        self.as_mut().refresh_unread();
+        tracing::debug!(
+            rows = self.inbox.items().len(),
+            unread = self.unread,
+            "inbox: notification added"
+        );
     }
 
     /// Marks a notification acknowledged. Returns whether anything changed.
@@ -68,7 +73,12 @@ impl qobject::InboxModel {
         let index = self.inbox_index(row as i32, 0, &QModelIndex::default());
         self.as_mut()
             .inbox_data_changed(&index, &index, &Default::default());
-        self.refresh_unread();
+        self.as_mut().refresh_unread();
+        tracing::debug!(
+            row,
+            unread = self.unread,
+            "inbox: notification acknowledged"
+        );
         true
     }
 

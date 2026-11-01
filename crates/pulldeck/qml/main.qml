@@ -24,7 +24,20 @@ ApplicationWindow {
     // Unix seconds, ticked so the "5m ago" labels stay current between refreshes.
     property real now: Date.now() / 1000
 
-    Component.onCompleted: backend.refresh()
+    Component.onCompleted: {
+        // The inbox must be attached before a server session can start delivering to it.
+        backend.attachInbox(inbox);
+        backend.refresh();
+    }
+
+    // Reading a notification in the inbox tells the server.
+    Connections {
+        target: inbox
+
+        function onAckRequested(notificationId: int): void {
+            backend.ackNotification(notificationId);
+        }
+    }
 
     Timer {
         interval: 60000
@@ -56,6 +69,11 @@ ApplicationWindow {
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
+            Label {
+                visible: backend.serverConfigured
+                text: backend.connection
+                opacity: 0.7
+            }
             BusyIndicator {
                 running: backend.loading
                 visible: backend.loading
@@ -64,6 +82,8 @@ ApplicationWindow {
             }
             ToolButton {
                 text: qsTr("Refresh")
+                // The server pushes changes, so there is nothing to refresh by hand.
+                visible: !backend.serverConfigured
                 enabled: !backend.loading
                 onClicked: backend.refresh()
             }
