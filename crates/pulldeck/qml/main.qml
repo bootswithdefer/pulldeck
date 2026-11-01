@@ -17,6 +17,10 @@ ApplicationWindow {
         id: backend
     }
 
+    InboxModel {
+        id: inbox
+    }
+
     // Unix seconds, ticked so the "5m ago" labels stay current between refreshes.
     property real now: Date.now() / 1000
 
@@ -66,70 +70,98 @@ ApplicationWindow {
         }
     }
 
-    ListView {
-        id: list
+    ColumnLayout {
         anchors.fill: parent
-        clip: true
-        model: backend
-        spacing: 1
-        ScrollBar.vertical: ScrollBar {}
+        spacing: 0
 
-        Label {
-            anchors.centerIn: parent
-            visible: list.count === 0 && !backend.loading
-            text: qsTr("No open pull requests")
-            opacity: 0.6
+        TabBar {
+            id: tabs
+            Layout.fillWidth: true
+
+            TabButton {
+                text: qsTr("Pull requests")
+            }
+            TabButton {
+                text: qsTr("Inbox") + (inbox.unread > 0 ? " (" + inbox.unread + ")" : "")
+            }
         }
 
-        delegate: ItemDelegate {
-            id: row
-            // One per role exposed by PrBackend (see role_names in backend.rs).
-            required property string title
-            required property string repo
-            required property int number
-            required property string url
-            required property string author
-            required property bool isDraft
-            required property string review
-            required property string checks
-            required property real updatedAt
-            width: ListView.view.width
-            onClicked: Qt.openUrlExternally(row.url)
+        StackLayout {
+            currentIndex: tabs.currentIndex
+            Layout.fillWidth: true
+            Layout.fillHeight: true
 
-            contentItem: RowLayout {
-                spacing: 12
+            ListView {
+                id: list
+                clip: true
+                model: backend
+                spacing: 1
+                ScrollBar.vertical: ScrollBar {}
 
-                ColumnLayout {
-                    spacing: 2
-                    Layout.fillWidth: true
-
-                    Label {
-                        text: (row.isDraft ? qsTr("[draft] ") : "") + row.title
-                        font.bold: true
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    Label {
-                        text: row.repo + " #" + row.number
-                        opacity: 0.65
-                        font.pointSize: Application.font.pointSize - 1
-                    }
-                }
-
-                Badge {
-                    kind: "review"
-                    value: row.review
-                }
-                Badge {
-                    kind: "checks"
-                    value: row.checks
-                }
                 Label {
-                    text: backend.ago(row.updatedAt, root.now)
+                    anchors.centerIn: parent
+                    visible: list.count === 0 && !backend.loading
+                    text: qsTr("No open pull requests")
                     opacity: 0.6
-                    Layout.minimumWidth: 70
-                    horizontalAlignment: Text.AlignRight
                 }
+
+                delegate: ItemDelegate {
+                    id: row
+                    // One per role exposed by PrBackend (see role_names in backend.rs).
+                    required property string title
+                    required property string repo
+                    required property int number
+                    required property string url
+                    required property string author
+                    required property bool isDraft
+                    required property string review
+                    required property string checks
+                    required property real updatedAt
+                    width: ListView.view.width
+                    onClicked: Qt.openUrlExternally(row.url)
+
+                    contentItem: RowLayout {
+                        spacing: 12
+
+                        ColumnLayout {
+                            spacing: 2
+                            Layout.fillWidth: true
+
+                            Label {
+                                text: (row.isDraft ? qsTr("[draft] ") : "") + row.title
+                                font.bold: true
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Label {
+                                text: row.repo + " #" + row.number
+                                opacity: 0.65
+                                font.pointSize: Application.font.pointSize - 1
+                            }
+                        }
+
+                        Badge {
+                            kind: "review"
+                            value: row.review
+                        }
+                        Badge {
+                            kind: "checks"
+                            value: row.checks
+                        }
+                        Label {
+                            text: backend.ago(row.updatedAt, root.now)
+                            opacity: 0.6
+                            Layout.minimumWidth: 70
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                }
+            }
+
+            InboxView {
+                model: inbox
+                age: timestamp => backend.ago(timestamp, root.now)
+                onAcknowledge: notificationId => inbox.ack(notificationId)
             }
         }
     }

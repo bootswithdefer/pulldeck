@@ -3,6 +3,7 @@
 //! `PrBackend` is a `QAbstractListModel`: QML binds a `ListView` straight to it and a refresh
 //! only inserts, removes or updates the rows that changed (see `pulldeck_core::store::diff`).
 
+use crate::inbox::InboxModelRust;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QVariant};
 use pulldeck_core::store::{self, Change};
@@ -129,6 +130,85 @@ pub mod qobject {
         /// Model index for a row, needed to emit `dataChanged`.
         #[inherit]
         fn index(self: &PrBackend, row: i32, column: i32, parent: &QModelIndex) -> QModelIndex;
+    }
+
+    // The notification inbox model. It is declared here, not in inbox.rs, because every QObject
+    // that derives from QAbstractListModel in a separate bridge generates the same cast symbols
+    // and the link fails; its state and behaviour live in `inbox.rs`.
+    impl cxx_qt::Threading for InboxModel {}
+
+    extern "RustQt" {
+        #[qobject]
+        #[base = QAbstractListModel]
+        #[qml_element]
+        #[qproperty(i32, unread)]
+        #[namespace = "pulldeck"]
+        type InboxModel = super::InboxModelRust;
+
+        /// The user read this notification: mark it locally and ask whoever owns the connection
+        /// (via `ackRequested`) to tell the server.
+        #[qinvokable]
+        fn ack(self: Pin<&mut Self>, id: i64);
+
+        /// Emitted when the user acknowledges a notification.
+        #[qsignal]
+        #[cxx_name = "ackRequested"]
+        fn ack_requested(self: Pin<&mut Self>, id: i64);
+
+        #[qinvokable]
+        #[cxx_override]
+        fn data(self: &InboxModel, index: &QModelIndex, role: i32) -> QVariant;
+
+        #[qinvokable]
+        #[cxx_override]
+        #[cxx_name = "roleNames"]
+        fn role_names(self: &InboxModel) -> QHash_i32_QByteArray;
+
+        #[qinvokable]
+        #[cxx_override]
+        #[cxx_name = "rowCount"]
+        fn row_count(self: &InboxModel, parent: &QModelIndex) -> i32;
+
+        /// # Safety
+        ///
+        /// Must be followed by `end_insert_rows`.
+        #[inherit]
+        #[cxx_name = "beginInsertRows"]
+        unsafe fn begin_insert_rows(
+            self: Pin<&mut InboxModel>,
+            parent: &QModelIndex,
+            first: i32,
+            last: i32,
+        );
+        /// # Safety
+        ///
+        /// Pairs with `begin_insert_rows`.
+        #[inherit]
+        #[cxx_name = "endInsertRows"]
+        unsafe fn end_insert_rows(self: Pin<&mut InboxModel>);
+    }
+
+    unsafe extern "RustQt" {
+        /// Emitted when the data of existing inbox rows changes.
+        #[inherit]
+        #[qsignal]
+        #[cxx_name = "dataChanged"]
+        fn inbox_data_changed(
+            self: Pin<&mut InboxModel>,
+            top_left: &QModelIndex,
+            bottom_right: &QModelIndex,
+            roles: &QVector_i32,
+        );
+
+        /// Model index for an inbox row, needed to emit `dataChanged`.
+        #[inherit]
+        #[cxx_name = "index"]
+        fn inbox_index(
+            self: &InboxModel,
+            row: i32,
+            column: i32,
+            parent: &QModelIndex,
+        ) -> QModelIndex;
     }
 }
 

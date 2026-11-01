@@ -1,6 +1,7 @@
 //! pulldeck: track your GitHub pull requests from a native Qt window.
 
 mod backend;
+mod inbox;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 use tracing_subscriber::EnvFilter;

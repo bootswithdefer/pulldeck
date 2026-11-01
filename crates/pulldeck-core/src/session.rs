@@ -230,6 +230,22 @@ impl Inbox {
         &self.items
     }
 
+    /// Row of the notification with this id when the inbox is shown newest first.
+    pub fn row_of(&self, id: u64) -> Option<usize> {
+        self.items
+            .iter()
+            .position(|n| n.id == id)
+            .map(|position| self.items.len() - 1 - position)
+    }
+
+    /// The notification at `row` when the inbox is shown newest first.
+    pub fn at_row(&self, row: usize) -> Option<&Notification> {
+        self.items
+            .len()
+            .checked_sub(1 + row)
+            .and_then(|position| self.items.get(position))
+    }
+
     /// Whether the user has acknowledged this notification.
     pub fn is_acked(&self, id: u64) -> bool {
         self.acked.contains(&id)
@@ -621,6 +637,34 @@ mod tests {
             (inbox.unacked(), inbox.is_acked(10), inbox.is_acked(11)),
             (1, true, false)
         );
+    }
+
+    #[test]
+    fn rows_are_numbered_newest_first() {
+        let mut inbox = Inbox::default();
+        assert_eq!(inbox.at_row(0), None);
+        for id in [10, 11, 12] {
+            inbox.insert(notification(id, id));
+        }
+        // Arrival order was 10, 11, 12, so the newest (12) is row 0.
+        let by_row: Vec<_> = (0..3).map(|r| inbox.at_row(r).map(|n| n.id)).collect();
+        assert_eq!(by_row, [Some(12), Some(11), Some(10)]);
+        assert_eq!(inbox.at_row(3), None);
+        // row_of and at_row are inverses.
+        for id in [10, 11, 12] {
+            let row = inbox.row_of(id).unwrap();
+            assert_eq!(inbox.at_row(row).map(|n| n.id), Some(id));
+        }
+        assert_eq!(inbox.row_of(99), None);
+    }
+
+    #[test]
+    fn a_new_notification_always_lands_on_row_zero() {
+        let mut inbox = Inbox::default();
+        for id in 1..=4 {
+            inbox.insert(notification(id, id));
+            assert_eq!(inbox.row_of(id), Some(0));
+        }
     }
 
     #[test]

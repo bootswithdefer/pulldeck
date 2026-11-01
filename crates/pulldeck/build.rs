@@ -6,7 +6,8 @@ fn main() {
             // PrBackend is a QAbstractListModel, which QML tooling finds in this module.
             .depend("QtQml.Models")
             .qml_file("qml/main.qml")
-            .qml_file("qml/Badge.qml"),
+            .qml_file("qml/Badge.qml")
+            .qml_file("qml/InboxView.qml"),
     )
     .files(["src/backend.rs"])
     .build();
