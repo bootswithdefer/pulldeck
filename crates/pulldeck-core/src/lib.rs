@@ -5,6 +5,7 @@
 pub mod auth;
 pub mod client;
 pub mod error;
+pub mod login;
 pub mod models;
 pub mod remote;
 pub mod session;
