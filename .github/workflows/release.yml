@@ -40,7 +40,7 @@ jobs:
       # The release itself (and its notes, from CHANGELOG.md) is created by release-plz;
       # this only attaches the binaries.
       - name: Attach binaries
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             pulldeck-*.tar.gz
