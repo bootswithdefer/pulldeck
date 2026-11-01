@@ -21,6 +21,10 @@ just run     # launch the app
 just list    # headless: print your PRs via the core crate
 ```
 
+- Install the git hooks once per clone with `prek install` ([prek](https://prek.j178.dev),
+  config in `prek.toml`). They check formatting, spelling, secrets and workflows on commit,
+  require Conventional Commit messages, and run clippy, tests and `cargo deny` before push.
+  `just pin` refreshes the pinned hook and action versions.
 - Keep UI-independent logic in `pulldeck-core` and unit-test it there.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:` …).
   With squash merges the **PR title** becomes the commit, so CI checks it.
@@ -41,3 +45,23 @@ Releases are automated with [release-plz](https://release-plz.dev):
 One-time setup: add a `RELEASE_PLZ_TOKEN` repository secret (a PAT with `contents` and
 `pull-requests` write access). Without it the tag is still created, but `release.yml` will
 not start.
+
+### Publishing to crates.io
+
+CI does not publish yet (`publish = false` in `release-plz.toml`). After a release PR is
+merged, publish by hand from the tagged commit:
+
+```bash
+cargo login            # once, with a crates.io token
+just publish-dry-run   # check packaging
+just publish           # dry run again, asks for confirmation, then publishes
+```
+
+`--no-verify` is required: `cxx-qt-build` writes a `.qmlls.ini` into the crate directory
+during the build, and cargo's tarball verification rejects build scripts that modify the
+source tree. The crate itself builds fine; CI covers that. Publishing is permanent, so use
+the dry run first. `pulldeck-core` is published before `pulldeck` automatically.
+
+To automate this, add a `CARGO_REGISTRY_TOKEN` secret, pass it to the `release` job in
+`.github/workflows/release-plz.yml`, set `publish = true` in `release-plz.toml` and add
+`publish_no_verify = true`.

@@ -7,6 +7,7 @@
 [![CI](https://github.com/bootswithdefer/pulldeck/actions/workflows/ci.yml/badge.svg)](https://github.com/bootswithdefer/pulldeck/actions/workflows/ci.yml)
 [![Security audit](https://github.com/bootswithdefer/pulldeck/actions/workflows/audit.yml/badge.svg)](https://github.com/bootswithdefer/pulldeck/actions/workflows/audit.yml)
 [![Release](https://img.shields.io/github/v/release/bootswithdefer/pulldeck?include_prereleases&sort=semver)](https://github.com/bootswithdefer/pulldeck/releases)
+[![crates.io](https://img.shields.io/crates/v/pulldeck.svg)](https://crates.io/crates/pulldeck)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.99%2B-orange.svg?logo=rust)](Cargo.toml)
 [![Qt 6](https://img.shields.io/badge/Qt-6-41cd52.svg?logo=qt&logoColor=white)](https://www.qt.io/)
@@ -28,9 +29,10 @@
 
 ## Install
 
-### From source
+### From crates.io
 
 Requirements: Rust 1.99+, Qt 6 (base and declarative) and the [GitHub CLI](https://cli.github.com/).
+Qt is compiled against at install time, so the development packages are needed.
 
 ```bash
 # Arch
@@ -39,6 +41,14 @@ sudo pacman -S qt6-base qt6-declarative github-cli
 sudo apt install qt6-base-dev qt6-declarative-dev libgl1-mesa-dev \
   qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates
 
+cargo install pulldeck
+```
+
+### From source
+
+With the same requirements:
+
+```bash
 git clone https://github.com/bootswithdefer/pulldeck
 cd pulldeck
 cargo install --path crates/pulldeck
