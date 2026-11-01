@@ -11,6 +11,17 @@ set -eu
 tool=$1
 shift
 
+# qmllint finds Qt's own QML modules relative to its binary, which breaks when the tools are
+# symlinked into a merged prefix (Nix). Honour the standard import-path variables when set.
+if [ "$tool" = qmllint ]; then
+    oldifs=$IFS
+    IFS=:
+    for dir in ${QML2_IMPORT_PATH:-} ${QML_IMPORT_PATH:-}; do
+        [ -n "$dir" ] && set -- -I "$dir" "$@"
+    done
+    IFS=$oldifs
+fi
+
 # 1. Ask qmake where Qt 6's binaries are (QMAKE overrides, then qmake6, then qmake on PATH).
 for qmake in "${QMAKE:-}" qmake6 qmake; do
     [ -n "$qmake" ] || continue
