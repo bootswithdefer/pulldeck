@@ -1,6 +1,6 @@
 <div align="center">
 
-# pulldeck
+<img src="images/logo.svg" alt="pulldeck" width="520">
 
 **Keep track of your GitHub pull requests from a native desktop window.**
 
