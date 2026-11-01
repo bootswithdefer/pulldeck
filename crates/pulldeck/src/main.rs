@@ -15,7 +15,10 @@ Track your GitHub pull requests.
 Usage: pulldeck [--version | --help]
 
 Authenticates with GH_TOKEN, GITHUB_TOKEN or `gh auth token`.
-Set RUST_LOG=pulldeck=debug for verbose logs.";
+Set RUST_LOG=pulldeck=debug for verbose logs.
+
+Development: PULLDECK_SERVER (e.g. http://127.0.0.1:8080) together with PULLDECK_TOKEN starts a
+session with a pulldeck server instead of polling GitHub. See CONTRIBUTING.md.";
 
 fn main() {
     match std::env::args().nth(1).as_deref() {

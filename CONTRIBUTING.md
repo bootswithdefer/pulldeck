@@ -48,6 +48,31 @@ just list    # headless: print your PRs via the core crate
   With squash merges the **PR title** becomes the commit, so CI checks it.
 - Do **not** edit `CHANGELOG.md` by hand. It is generated from commit messages.
 
+## Developing against a server
+
+The collaboration features need a pulldeck server (a separate project). Two ways to work on the
+client without one:
+
+- `just demo` runs the app against a scripted fake server built into a `demo` cargo feature
+  (never part of a release build). It plays a short session: a snapshot, notifications, a PR
+  that moves, then the "user" reads a notification and asks for a review.
+- Against a real server in its loopback-only dev mode (no GitHub involved), which prints a
+  session token for each seeded user:
+
+  ```bash
+  PULLDECK_SERVER=http://127.0.0.1:8080 PULLDECK_TOKEN=<token> just run
+  # or, without the UI, print what the server says:
+  PULLDECK_TOKEN=<token> cargo run -p pulldeck-core --example live -- http://127.0.0.1:8080
+  ```
+
+  `PULLDECK_SERVER`/`PULLDECK_TOKEN` are a development shortcut until the sign-in screen and
+  keyring storage exist. Plain `http` is only accepted for loopback addresses; anything else
+  must be `https`. The token is never logged.
+
+The protocol is defined by the server. `crates/pulldeck-core/tests/fixtures/frames.json` is a
+copy of its shared fixtures (see the README next to it for which commit); refresh it when the
+protocol changes.
+
 ## Releases
 
 Releases are automated with [release-plz](https://release-plz.dev):

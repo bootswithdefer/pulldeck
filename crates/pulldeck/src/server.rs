@@ -2,14 +2,14 @@
 //!
 //! A session runs on the tokio runtime and reports `SessionUpdate`s; everything that touches a
 //! Qt object is queued back onto the Qt thread, so no network work happens there.
-// Nothing starts a session until the `demo` feature or the real websocket transport exists.
-#![cfg_attr(not(feature = "demo"), allow(dead_code))]
 
 use crate::backend::{open_prs_status, qobject, runtime};
 use cxx_qt::{CxxQtThread, CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use pulldeck_core::remote::{ConnState, Connector, RemoteSession, SessionUpdate};
 use pulldeck_core::session::{ClientCommand, PrRef, SessionToken};
+use pulldeck_core::settings::ServerUrl;
+use pulldeck_core::ws::WsConnector;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -35,6 +35,21 @@ pub(crate) fn next_request_id() -> String {
             .map_or(0, |d| d.as_nanos() as u64)
     });
     format!("{start:x}-{}", COUNTER.fetch_add(1, Ordering::Relaxed))
+}
+
+/// A server and session token from the environment, for developing against a dev server before
+/// the sign-in screen and keyring storage exist: `PULLDECK_SERVER=http://127.0.0.1:8080
+/// PULLDECK_TOKEN=<token>`. Both must be set; the token is never logged.
+fn development_session() -> Option<(ServerUrl, SessionToken)> {
+    let server = std::env::var("PULLDECK_SERVER").ok()?;
+    let token = std::env::var("PULLDECK_TOKEN").ok()?;
+    match ServerUrl::parse(&server) {
+        Ok(server) => Some((server, SessionToken::new(token))),
+        Err(error) => {
+            tracing::warn!(%error, "ignoring PULLDECK_SERVER");
+            None
+        }
+    }
 }
 
 fn pr_ref(repo: &QString, number: i64) -> PrRef {
@@ -81,6 +96,10 @@ impl qobject::PrBackend {
         #[cfg(feature = "demo")]
         if std::env::var_os("PULLDECK_DEMO").is_some() {
             crate::demo::start(self);
+            return;
+        }
+        if let Some((server, token)) = development_session() {
+            self.start_session(WsConnector::new(&server), token);
         }
     }
 

@@ -377,8 +377,6 @@ impl qobject::PrBackend {
     /// (which diffs a fresh fetch) and a server session (which sends changes already computed
     /// against its replica) end up here.
     /// How many PRs the list currently holds.
-    // Used by the server session glue, which only runs with the demo or a real transport.
-    #[cfg_attr(not(feature = "demo"), allow(dead_code))]
     pub(crate) fn pr_count(&self) -> usize {
         self.prs.len()
     }
