@@ -223,14 +223,21 @@ impl qobject::PrBackend {
 
     /// Swaps in a new list, telling attached views about each inserted, removed or updated row
     /// instead of resetting the whole model (so selection and scroll position survive).
-    fn replace_prs(mut self: Pin<&mut Self>, new: Vec<PullRequest>) {
-        let parent = QModelIndex::default();
+    fn replace_prs(self: Pin<&mut Self>, new: Vec<PullRequest>) {
         let changes = store::diff(&self.prs, &new);
         tracing::debug!(
             rows = new.len(),
             changes = changes.len(),
             "applying refresh"
         );
+        self.apply_changes(changes);
+    }
+
+    /// Applies row changes in order, notifying attached views of each one. Both the local refresh
+    /// (which diffs a fresh fetch) and a server session (which sends changes already computed
+    /// against its replica) end up here.
+    fn apply_changes(mut self: Pin<&mut Self>, changes: Vec<Change>) {
+        let parent = QModelIndex::default();
         for change in changes {
             match &change {
                 Change::Remove(row) => {
