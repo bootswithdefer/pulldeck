@@ -1,5 +1,6 @@
 //! pulldeck: track your GitHub pull requests from a native Qt window.
 
+mod auth;
 mod backend;
 #[cfg(feature = "demo")]
 mod demo;

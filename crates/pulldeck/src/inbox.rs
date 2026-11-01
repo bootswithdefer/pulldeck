@@ -61,6 +61,14 @@ impl qobject::InboxModel {
         );
     }
 
+    /// Forgets every notification (sign-out).
+    pub fn reset(mut self: Pin<&mut Self>) {
+        self.as_mut().begin_reset_model();
+        self.as_mut().rust_mut().inbox = Inbox::default();
+        self.as_mut().end_reset_model();
+        self.as_mut().refresh_unread();
+    }
+
     /// Marks a notification acknowledged. Returns whether anything changed.
     pub fn mark_acked(mut self: Pin<&mut Self>, id: u64) -> bool {
         // The row does not change when a notification is acknowledged, so look it up once.

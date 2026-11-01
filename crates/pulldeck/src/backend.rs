@@ -51,6 +51,15 @@ pub mod qobject {
         /// "offline" without a server, otherwise "connecting", "live", "disconnected" or "failed".
         #[qproperty(QString, connection)]
         #[qproperty(bool, server_configured, cxx_name = "serverConfigured")]
+        /// "signedOut", "signingIn" or "signedIn" (a server session exists).
+        #[qproperty(QString, auth)]
+        /// While signing in: the code to enter on GitHub and where to enter it.
+        #[qproperty(QString, user_code, cxx_name = "userCode")]
+        #[qproperty(QString, verification_uri, cxx_name = "verificationUri")]
+        /// Why the last sign-in failed or the saved session was rejected; empty otherwise.
+        #[qproperty(QString, auth_error, cxx_name = "authError")]
+        /// The server this app signs in to (from the settings file or the last sign-in).
+        #[qproperty(QString, server_url, cxx_name = "serverUrl")]
         #[namespace = "pulldeck"]
         type PrBackend = super::PrBackendRust;
 
@@ -58,6 +67,22 @@ pub mod qobject {
         /// the list.
         #[qinvokable]
         fn refresh(self: Pin<&mut Self>);
+
+        /// Start the sign-in flow with the server at `server`; progress shows in `auth`,
+        /// `userCode` and `verificationUri`.
+        #[qinvokable]
+        #[cxx_name = "signIn"]
+        fn sign_in(self: Pin<&mut Self>, server: &QString);
+
+        /// Abandon a sign-in that is waiting for the user.
+        #[qinvokable]
+        #[cxx_name = "cancelSignIn"]
+        fn cancel_sign_in(self: Pin<&mut Self>);
+
+        /// End the server session, forget the saved token and go back to polling GitHub.
+        #[qinvokable]
+        #[cxx_name = "signOut"]
+        fn sign_out(self: Pin<&mut Self>);
 
         /// Human-friendly age ("5m ago") of a Unix timestamp, relative to `now`.
         #[qinvokable]
@@ -248,6 +273,15 @@ pub mod qobject {
             roles: &QVector_i32,
         );
 
+        /// Wraps replacing the whole inbox (sign-out).
+        #[inherit]
+        #[cxx_name = "beginResetModel"]
+        fn begin_reset_model(self: Pin<&mut InboxModel>);
+        /// Pairs with `begin_reset_model`.
+        #[inherit]
+        #[cxx_name = "endResetModel"]
+        fn end_reset_model(self: Pin<&mut InboxModel>);
+
         /// Model index for an inbox row, needed to emit `dataChanged`.
         #[inherit]
         #[cxx_name = "index"]
@@ -278,6 +312,15 @@ pub struct PrBackendRust {
     loading: bool,
     connection: QString,
     server_configured: bool,
+    auth: QString,
+    user_code: QString,
+    verification_uri: QString,
+    auth_error: QString,
+    server_url: QString,
+    /// The sign-in in progress, if any.
+    pub(crate) login_task: Option<tokio::task::AbortHandle>,
+    /// The running session's tasks, stopped on sign-out.
+    pub(crate) session_tasks: Vec<tokio::task::AbortHandle>,
     prs: Vec<PullRequest>,
     /// Commands for the server session, once one is running.
     pub(crate) commands: Option<tokio::sync::mpsc::Sender<ClientCommand>>,
@@ -294,6 +337,13 @@ impl Default for PrBackendRust {
             loading: false,
             connection: QString::from("offline"),
             server_configured: false,
+            auth: QString::from("signedOut"),
+            user_code: QString::default(),
+            verification_uri: QString::default(),
+            auth_error: QString::default(),
+            server_url: QString::default(),
+            login_task: None,
+            session_tasks: Vec::new(),
             prs: Vec::new(),
             commands: None,
             inbox: None,

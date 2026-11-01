@@ -21,6 +21,11 @@ ApplicationWindow {
         id: inbox
     }
 
+    SignInDialog {
+        id: signIn
+        deck: backend
+    }
+
     // Unix seconds, ticked so the "5m ago" labels stay current between refreshes.
     property real now: Date.now() / 1000
 
@@ -64,7 +69,7 @@ ApplicationWindow {
                 font.bold: true
             }
             Label {
-                text: backend.status
+                text: backend.authError !== "" ? backend.authError : backend.status
                 opacity: 0.7
                 elide: Text.ElideRight
                 Layout.fillWidth: true
@@ -79,6 +84,10 @@ ApplicationWindow {
                 visible: backend.loading
                 implicitHeight: 24
                 implicitWidth: 24
+            }
+            ToolButton {
+                text: backend.auth === "signedIn" ? qsTr("Sign out") : qsTr("Sign in…")
+                onClicked: backend.auth === "signedIn" ? backend.signOut() : signIn.open()
             }
             ToolButton {
                 text: qsTr("Refresh")

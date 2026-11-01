@@ -100,6 +100,8 @@ impl qobject::PrBackend {
         }
         if let Some((server, token)) = development_session() {
             self.start_session(WsConnector::new(&server), token);
+        } else {
+            self.resume_saved_session();
         }
     }
 
@@ -117,10 +119,18 @@ impl qobject::PrBackend {
         self.as_mut()
             .set_status(QString::from("Connecting to server…"));
 
+        self.as_mut().set_auth(QString::from("signedIn"));
+
         let backend = self.qt_thread();
         let inbox = self.inbox.clone();
-        runtime().spawn(RemoteSession::new(connector, token).run(command_rx, update_tx));
-        runtime().spawn(forward(update_rx, backend, inbox));
+        let session =
+            runtime().spawn(RemoteSession::new(connector, token).run(command_rx, update_tx));
+        let forwarder = runtime().spawn(forward(update_rx, backend, inbox));
+        // A new session replaces any previous one.
+        for task in std::mem::take(&mut self.as_mut().rust_mut().session_tasks) {
+            task.abort();
+        }
+        self.rust_mut().session_tasks = vec![session.abort_handle(), forwarder.abort_handle()];
     }
 
     pub fn request_review(self: Pin<&mut Self>, repo: &QString, number: i64, to: &QString) {
@@ -195,9 +205,12 @@ async fn forward(
         tracing::debug!("session update: {}", describe(&update));
         let delivered = match update {
             SessionUpdate::State(state) => backend.queue(move |mut b| {
-                b.as_mut().set_connection(QString::from(state_name(&state)));
                 if let ConnState::Failed(reason) = &state {
+                    // The server turned the session down for good: the saved token is useless.
                     b.as_mut().set_status(QString::from(reason.as_str()));
+                    b.session_failed(reason);
+                } else {
+                    b.set_connection(QString::from(state_name(&state)));
                 }
             }),
             SessionUpdate::Login(login) => {

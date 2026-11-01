@@ -7,7 +7,8 @@ fn main() {
             .depend("QtQml.Models")
             .qml_file("qml/main.qml")
             .qml_file("qml/Badge.qml")
-            .qml_file("qml/InboxView.qml"),
+            .qml_file("qml/InboxView.qml")
+            .qml_file("qml/SignInDialog.qml"),
     )
     .files(["src/backend.rs"])
     .build();
