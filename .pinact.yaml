@@ -1,0 +1,8 @@
+# https://github.com/suzuki-shunsuke/pinact
+version: 3
+
+ignore_actions:
+  # `stable` is a branch the action reads to choose the Rust toolchain; pinning it to a SHA
+  # would freeze the compiler version.
+  - name: dtolnay/rust-toolchain
+    ref: stable

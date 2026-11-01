@@ -26,3 +26,7 @@ test:
 
 deny:
     cargo deny check
+
+# Pin GitHub Actions to commit SHAs and update them to the latest releases
+pin:
+    GITHUB_TOKEN="$(gh auth token)" pinact run --update
