@@ -180,7 +180,8 @@ ApplicationWindow {
 
             InboxView {
                 model: inbox
-                age: timestamp => backend.ago(timestamp, root.now)
+                formatter: backend
+                now: root.now
                 onAcknowledge: notificationId => inbox.ack(notificationId)
             }
         }

@@ -3,15 +3,16 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import io.github.bootswithdefer.pulldeck
 
 // What other people sent you about pull requests, newest first. Bind `model` to an InboxModel.
 ListView {
     id: view
 
-    // Turns a Unix timestamp into text like "5m ago".
-    property var age: function (timestamp) {
-        return "";
-    }
+    // Turns timestamps into text like "5m ago" (typed rather than a function property, which the
+    // QML linter flags), relative to `now` in Unix seconds.
+    property PrBackend formatter
+    property real now: 0
 
     // Emitted when the user reads a notification; the owner tells the server.
     signal acknowledge(int notificationId)
@@ -91,7 +92,7 @@ ListView {
             }
 
             Label {
-                text: view.age(row.createdAt)
+                text: view.formatter ? view.formatter.ago(row.createdAt, view.now) : ""
                 opacity: 0.6
                 Layout.minimumWidth: 70
                 horizontalAlignment: Text.AlignRight
