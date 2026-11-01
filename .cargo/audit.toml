@@ -1,0 +1,10 @@
+# Keep in step with the ignore list in deny.toml.
+[advisories]
+ignore = [
+    # zbus 6 absorbed these crates; they arrive through keyring's Secret Service backend (zbus 5).
+    # They are "unmaintained" only in the sense of having moved. Drop them when keyring moves to
+    # zbus 6.
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
+]
