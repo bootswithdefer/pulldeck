@@ -26,6 +26,11 @@ ApplicationWindow {
         deck: backend
     }
 
+    ActionDialog {
+        id: actions
+        deck: backend
+    }
+
     // Unix seconds, ticked so the "5m ago" labels stay current between refreshes.
     property real now: Date.now() / 1000
 
@@ -182,6 +187,30 @@ ApplicationWindow {
                             opacity: 0.6
                             Layout.minimumWidth: 70
                             horizontalAlignment: Text.AlignRight
+                        }
+                        // Collaboration actions need a server session.
+                        ToolButton {
+                            text: "⋯"
+                            visible: backend.auth === "signedIn"
+                            enabled: backend.connection === "live"
+                            onClicked: menu.popup()
+
+                            Menu {
+                                id: menu
+
+                                MenuItem {
+                                    text: qsTr("Request review…")
+                                    onTriggered: actions.show("review", row.repo, row.number)
+                                }
+                                MenuItem {
+                                    text: qsTr("Nudge…")
+                                    onTriggered: actions.show("nudge", row.repo, row.number)
+                                }
+                                MenuItem {
+                                    text: qsTr("Message…")
+                                    onTriggered: actions.show("message", row.repo, row.number)
+                                }
+                            }
                         }
                     }
                 }
