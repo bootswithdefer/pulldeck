@@ -56,13 +56,13 @@ jobs:
       - run: just qml-lint
 
   # The same hooks contributors run locally (see prek.toml), so CI can't drift from them.
-  # Slow pre-push hooks (clippy, test, deny) are covered by the jobs here; pinact-check
-  # needs a tool the runner doesn't have.
+  # Slow pre-push hooks (clippy, test, deny) are covered by the jobs here. qmlformat needs Qt
+  # and just, which the app job has; pinact-check needs a tool this runner doesn't have.
   hooks:
     name: hooks (prek)
     runs-on: ubuntu-latest
     env:
-      SKIP: pinact-check
+      SKIP: pinact-check,qmlformat
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@stable
