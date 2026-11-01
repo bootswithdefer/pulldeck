@@ -12,6 +12,9 @@ jobs:
   # Tags and publishes a GitHub release once a release PR has been merged.
   release:
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.rp.outputs.releases_created }}
+      tag: ${{ fromJSON(steps.rp.outputs.releases)[0].tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -19,12 +22,24 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: release-plz/action@f67a7e724bdad4a0f6875f186060a0ca2770d76c # v0.5.147
+        id: rp
         with:
           command: release
         env:
-          # A PAT (or GitHub App token) is needed so the tag push triggers release.yml;
-          # events created with GITHUB_TOKEN do not start other workflows.
+          # Optional PAT (or GitHub App token): only needed if you want CI to run on the
+          # release PR. Tags made with GITHUB_TOKEN don't start other workflows, which is
+          # why the binaries job below calls release.yml directly.
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+
+  # Builds and attaches the Linux binary when (and only when) a release was just created.
+  binaries:
+    needs: release
+    if: needs.release.outputs.releases_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
 
   # Opens/updates the release PR: version bump + changelog from Conventional Commits.
   release-pr:

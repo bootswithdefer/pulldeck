@@ -1,20 +1,36 @@
-name: Release
+name: Release binaries
 
+# Builds the Linux binary for an existing release and attaches it.
+#  - release-plz.yml calls this right after it creates a release (no PAT needed).
+#  - Run it by hand to (re)build a release:  gh workflow run release.yml -f tag=v0.1.0
 on:
-  push:
-    tags: ["v*.*.*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and attach to, e.g. v0.1.0
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach to, e.g. v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 env:
   CARGO_TERM_COLOR: always
+  TAG: ${{ inputs.tag }}
 
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
       - name: Install Qt 6
         run: |
           sudo apt-get update
@@ -25,23 +41,20 @@ jobs:
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.name=="pulldeck") | .version')
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version v$version" >&2
+          if [ "v$version" != "$TAG" ]; then
+            echo "tag $TAG does not match Cargo.toml version v$version" >&2
             exit 1
           fi
       - run: cargo build --release -p pulldeck
       - name: Package
         run: |
-          name="pulldeck-${GITHUB_REF_NAME}-x86_64-linux"
+          name="pulldeck-${TAG}-x86_64-linux"
           mkdir "$name"
           cp target/release/pulldeck packaging/pulldeck.desktop LICENSE README.md "$name"/
           tar czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
-      # The release itself (and its notes, from CHANGELOG.md) is created by release-plz;
-      # this only attaches the binaries.
+      # The release and its notes are created by release-plz; this only attaches the binaries.
       - name: Attach binaries
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: |
-            pulldeck-*.tar.gz
-            pulldeck-*.tar.gz.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "pulldeck-${TAG}-x86_64-linux.tar.gz" "pulldeck-${TAG}-x86_64-linux.tar.gz.sha256" --clobber

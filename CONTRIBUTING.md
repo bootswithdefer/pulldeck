@@ -40,11 +40,12 @@ Releases are automated with [release-plz](https://release-plz.dev):
    (`feat` → Added, `fix` → Fixed, `perf`/`refactor` → Changed, …; `chore`, `ci`, `docs` and
    `test` are omitted).
 2. Merging that PR tags `vX.Y.Z` and creates the GitHub release with the changelog section.
-3. The tag triggers `release.yml`, which attaches a Linux binary.
+3. The same workflow then calls `release.yml`, which builds the Linux binary and attaches it
+   to the release. To (re)build one by hand: `gh workflow run release.yml -f tag=vX.Y.Z`.
 
-One-time setup: add a `RELEASE_PLZ_TOKEN` repository secret (a PAT with `contents` and
-`pull-requests` write access). Without it the tag is still created, but `release.yml` will
-not start.
+Optional: add a `RELEASE_PLZ_TOKEN` repository secret (a PAT with `contents` and
+`pull-requests` write access). Pull requests opened with the default `GITHUB_TOKEN` don't
+trigger CI, so without it the release PR runs no checks.
 
 ### Publishing to crates.io
 
