@@ -1,6 +1,13 @@
 [advisories]
 version = 2
 yanked = "deny"
+# zbus 6 absorbed these crates; they are "unmaintained" only in the sense of having moved. They
+# arrive through keyring's Secret Service backend (zbus 5). Drop these when keyring moves to zbus 6.
+ignore = [
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
+]
 
 [licenses]
 version = 2

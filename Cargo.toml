@@ -23,6 +23,7 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = ["c
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
 tempfile = "3"
 thiserror = "2"
+keyring = "4"
 toml = "1"
 wiremock = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time"] }

@@ -22,6 +22,56 @@ pub trait TokenStore: Send + Sync {
     fn clear(&self) -> Result<(), TokenStoreError>;
 }
 
+/// Keeps the token in the OS keyring (Secret Service on Linux, Keychain on macOS, Credential
+/// Manager on Windows), under one entry per server so signing in elsewhere never clobbers it.
+#[derive(Debug)]
+pub struct KeyringTokenStore {
+    service: String,
+    account: String,
+}
+
+impl KeyringTokenStore {
+    /// A store for the session token issued by `server`.
+    pub fn new(server: &crate::settings::ServerUrl) -> Self {
+        Self {
+            service: "pulldeck".into(),
+            account: server.url(""),
+        }
+    }
+
+    fn entry(&self) -> Result<keyring::Entry, TokenStoreError> {
+        keyring::Entry::new(&self.service, &self.account).map_err(store_error)
+    }
+}
+
+fn store_error(error: keyring::Error) -> TokenStoreError {
+    // keyring errors describe the backend, never the secret.
+    TokenStoreError(error.to_string())
+}
+
+impl TokenStore for KeyringTokenStore {
+    fn load(&self) -> Result<Option<SessionToken>, TokenStoreError> {
+        match self.entry()?.get_password() {
+            Ok(token) => Ok(Some(SessionToken::new(token))),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(store_error(error)),
+        }
+    }
+
+    fn save(&self, token: &SessionToken) -> Result<(), TokenStoreError> {
+        self.entry()?
+            .set_password(token.expose())
+            .map_err(store_error)
+    }
+
+    fn clear(&self) -> Result<(), TokenStoreError> {
+        match self.entry()?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(store_error(error)),
+        }
+    }
+}
+
 /// Keeps the token in memory only: lost on exit. For tests and for running without a keyring.
 #[derive(Debug, Default)]
 pub struct MemoryTokenStore {
@@ -66,6 +116,20 @@ mod tests {
         assert_eq!(store.load().unwrap().unwrap().expose(), "a");
         store.save(&SessionToken::new("b")).unwrap();
         assert_eq!(store.load().unwrap().unwrap().expose(), "b");
+        store.clear().unwrap();
+        assert_eq!(store.load().unwrap(), None);
+    }
+
+    /// Needs a running Secret Service (a desktop session): `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "needs an OS keyring"]
+    fn keyring_round_trip() {
+        let server = crate::settings::ServerUrl::parse("http://127.0.0.1:9").unwrap();
+        let store = KeyringTokenStore::new(&server);
+        store.clear().unwrap();
+        assert_eq!(store.load().unwrap(), None);
+        store.save(&SessionToken::new("secret")).unwrap();
+        assert_eq!(store.load().unwrap().unwrap().expose(), "secret");
         store.clear().unwrap();
         assert_eq!(store.load().unwrap(), None);
     }
