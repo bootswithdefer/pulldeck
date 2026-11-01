@@ -130,11 +130,30 @@ pub enum ServerEvent {
         /// The PR they are looking at, if any.
         viewing: Option<PrRef>,
     },
+    /// Whether the server can currently read this user's pull requests. Ephemeral.
+    Status {
+        /// The state.
+        sync: SyncStatus,
+        /// Where to install the GitHub App, for [`SyncStatus::NotInstalled`].
+        install_url: Option<String>,
+    },
     /// The server is closing the connection.
     Error {
         /// Why.
         message: String,
     },
+}
+
+/// Whether the server can read the user's pull requests from GitHub.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SyncStatus {
+    /// Working. Assumed until the server says otherwise.
+    #[default]
+    Ok,
+    /// GitHub no longer accepts the user's credentials; the list is stale until they sign in again.
+    NeedsSignin,
+    /// The GitHub App is installed nowhere the user can see, so there is nothing to read.
+    NotInstalled,
 }
 
 /// What the client tells the server.

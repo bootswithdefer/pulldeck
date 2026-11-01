@@ -7,7 +7,7 @@ use crate::backend::{open_prs_status, qobject, runtime};
 use cxx_qt::{CxxQtThread, CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use pulldeck_core::remote::{ConnState, Connector, RemoteSession, SessionUpdate};
-use pulldeck_core::session::{ClientCommand, PrRef, SessionToken};
+use pulldeck_core::session::{ClientCommand, PrRef, SessionToken, SyncStatus};
 use pulldeck_core::settings::ServerUrl;
 use pulldeck_core::ws::WsConnector;
 use std::pin::Pin;
@@ -22,6 +22,15 @@ fn state_name(state: &ConnState) -> &'static str {
         ConnState::Live => "live",
         ConnState::Disconnected => "disconnected",
         ConnState::Failed(_) => "failed",
+    }
+}
+
+/// The names QML compares `syncStatus` against.
+fn sync_name(status: SyncStatus) -> &'static str {
+    match status {
+        SyncStatus::Ok => "ok",
+        SyncStatus::NeedsSignin => "needsSignin",
+        SyncStatus::NotInstalled => "notInstalled",
     }
 }
 
@@ -82,6 +91,7 @@ fn describe(update: &SessionUpdate) -> String {
                 }
             )
         }
+        SessionUpdate::Sync { status, .. } => format!("sync {}", sync_name(*status)),
         SessionUpdate::Presence { online, .. } => format!("presence online={online}"),
     }
 }
@@ -233,6 +243,11 @@ async fn forward(
         tracing::debug!("session update: {}", describe(&update));
         let delivered = match update {
             SessionUpdate::State(state) => backend.queue(move |mut b| {
+                if state == ConnState::Connecting {
+                    // The server only reports problems, so each connection starts out healthy.
+                    b.as_mut().set_sync_status(QString::from("ok"));
+                    b.as_mut().set_install_url(QString::default());
+                }
                 if let ConnState::Failed(reason) = &state {
                     // The server turned the session down for good: the saved token is useless.
                     b.as_mut().set_status(QString::from(reason.as_str()));
@@ -264,6 +279,14 @@ async fn forward(
                     ok,
                     QString::from(message.as_str()),
                 );
+            }),
+            SessionUpdate::Sync {
+                status,
+                install_url,
+            } => backend.queue(move |mut b| {
+                b.as_mut().set_sync_status(QString::from(sync_name(status)));
+                let url = install_url.unwrap_or_default();
+                b.set_install_url(QString::from(url.as_str()));
             }),
             // Presence is shown once the UI has somewhere to put it.
             SessionUpdate::Presence { .. } => Ok(()),
@@ -299,6 +322,13 @@ mod tests {
             presence_command(true, Some(pr)),
             Some(ClientCommand::Presence { viewing: Some(_) })
         ));
+    }
+
+    #[test]
+    fn sync_states_have_stable_names_for_qml() {
+        assert_eq!(sync_name(SyncStatus::Ok), "ok");
+        assert_eq!(sync_name(SyncStatus::NeedsSignin), "needsSignin");
+        assert_eq!(sync_name(SyncStatus::NotInstalled), "notInstalled");
     }
 
     #[test]

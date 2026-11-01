@@ -114,6 +114,37 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
+        // The server can reach us but not GitHub on our behalf. The list below may be stale or
+        // empty until this is fixed.
+        Pane {
+            visible: backend.auth === "signedIn" && backend.syncStatus !== "ok"
+            Layout.fillWidth: true
+            background: Rectangle {
+                color: palette.alternateBase
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 12
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    text: backend.syncStatus === "needsSignin" ? qsTr("GitHub no longer accepts your login, so your pull requests may be out of date.") : qsTr("The pulldeck GitHub App isn't installed on any repositories you can see, so there is nothing to show yet.")
+                }
+                Button {
+                    visible: backend.syncStatus === "needsSignin"
+                    text: qsTr("Sign in again")
+                    onClicked: signIn.open()
+                }
+                Button {
+                    visible: backend.syncStatus === "notInstalled" && backend.installUrl !== ""
+                    text: qsTr("Install the app")
+                    onClicked: Qt.openUrlExternally(backend.installUrl)
+                }
+            }
+        }
+
         TabBar {
             id: tabs
             Layout.fillWidth: true

@@ -54,6 +54,11 @@ pub mod qobject {
         /// Whether the user chose to tell others which PR they are viewing. Off by default; change
         /// it with `setPresenceEnabled`, which also saves it.
         #[qproperty(bool, presence)]
+        /// Whether the server can read your pull requests: "ok", "needsSignin" (sign in again; the
+        /// list is stale) or "notInstalled" (the GitHub App is not installed anywhere you can see).
+        #[qproperty(QString, sync_status, cxx_name = "syncStatus")]
+        /// Where to install the GitHub App when `syncStatus` is "notInstalled"; may be empty.
+        #[qproperty(QString, install_url, cxx_name = "installUrl")]
         /// "signedOut", "signingIn" or "signedIn" (a server session exists).
         #[qproperty(QString, auth)]
         /// While signing in: the code to enter on GitHub and where to enter it.
@@ -326,6 +331,8 @@ pub struct PrBackendRust {
     connection: QString,
     server_configured: bool,
     presence: bool,
+    sync_status: QString,
+    install_url: QString,
     auth: QString,
     user_code: QString,
     verification_uri: QString,
@@ -352,6 +359,8 @@ impl Default for PrBackendRust {
             connection: QString::from("offline"),
             server_configured: false,
             presence: false,
+            sync_status: QString::from("ok"),
+            install_url: QString::default(),
             auth: QString::from("signedOut"),
             user_code: QString::default(),
             verification_uri: QString::default(),

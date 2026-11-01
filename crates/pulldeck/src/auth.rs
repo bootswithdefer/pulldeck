@@ -125,7 +125,12 @@ impl qobject::PrBackend {
     }
 
     pub fn sign_in(mut self: Pin<&mut Self>, server: &QString) {
-        if self.login_task.is_some() || self.auth().to_string() == "signedIn" {
+        // Signing in again is how an expired GitHub login (needsSignin) gets fixed, so it is
+        // allowed while a session exists; the new session replaces the old one.
+        let signed_in = self.auth().to_string() == "signedIn";
+        if self.login_task.is_some()
+            || (signed_in && self.sync_status().to_string() != "needsSignin")
+        {
             return;
         }
         let parsed = ServerUrl::parse(&server.to_string()).map_err(|e| e.to_string());
@@ -182,10 +187,21 @@ impl qobject::PrBackend {
                 self.start_session(WsConnector::new(server), signed_in.token);
             }
             Err(message) => {
-                self.as_mut().set_auth(QString::from("signedOut"));
+                let idle = self.idle_auth();
+                self.as_mut().set_auth(idle);
                 self.set_auth_error(QString::from(message.as_str()));
             }
         }
+    }
+
+    /// What `auth` is when no sign-in is in progress: signed in if a session is still running
+    /// (signing in again while the server says "needsSignin"), otherwise signed out.
+    fn idle_auth(&self) -> QString {
+        QString::from(if *self.server_configured() {
+            "signedIn"
+        } else {
+            "signedOut"
+        })
     }
 
     pub fn cancel_sign_in(mut self: Pin<&mut Self>) {
@@ -193,7 +209,8 @@ impl qobject::PrBackend {
             task.abort();
         }
         if self.auth().to_string() == "signingIn" {
-            self.as_mut().set_auth(QString::from("signedOut"));
+            let idle = self.idle_auth();
+            self.as_mut().set_auth(idle);
             self.as_mut().set_user_code(QString::default());
             self.as_mut().set_verification_uri(QString::default());
         }

@@ -88,6 +88,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             SessionUpdate::ActionResult { request_id, result } => {
                 println!("action {request_id}: {result:?}");
             }
+            SessionUpdate::Sync {
+                status,
+                install_url,
+            } => println!("sync: {status:?} {}", install_url.unwrap_or_default()),
             SessionUpdate::Presence { login, online, .. } => {
                 println!("presence: {login} online={online}");
             }

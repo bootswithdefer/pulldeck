@@ -5,7 +5,9 @@
 //! fake and a paused clock: no sockets, no Qt. A real websocket transport only has to convert
 //! between its protocol messages and [`ServerEvent`] / [`ClientCommand`].
 
-use crate::session::{ClientCommand, Notification, PrRef, ServerEvent, SessionToken, Synced};
+use crate::session::{
+    ClientCommand, Notification, PrRef, ServerEvent, SessionToken, SyncStatus, Synced,
+};
 use crate::store::Change;
 use std::future::Future;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -79,6 +81,15 @@ pub enum SessionUpdate {
         request_id: String,
         /// `Ok` if accepted, otherwise the reason it was refused.
         result: Result<(), String>,
+    },
+    /// Whether the server can read the user's pull requests. The server only reports a problem
+    /// (and later its end), never "all fine" up front, so whoever shows this should treat each
+    /// `State(Connecting)` as a reset to `Ok`.
+    Sync {
+        /// The state.
+        status: SyncStatus,
+        /// Where to install the GitHub App, if that is the problem.
+        install_url: Option<String>,
     },
     /// Another user's presence changed.
     Presence {
@@ -309,6 +320,10 @@ impl<C: Connector> RemoteSession<C> {
             ServerEvent::Rejected { request_id, reason } => Some(SessionUpdate::ActionResult {
                 request_id: request_id.clone(),
                 result: Err(reason.clone()),
+            }),
+            ServerEvent::Status { sync, install_url } => Some(SessionUpdate::Sync {
+                status: *sync,
+                install_url: install_url.clone(),
             }),
             ServerEvent::Presence {
                 login,
@@ -822,6 +837,37 @@ mod tests {
                 login: "hubot".into(),
                 online: true,
                 viewing: Some(pr_ref(7))
+            }
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sync_status_reaches_the_ui_and_leaves_the_list_alone() {
+        let (transport, mut server) = connection();
+        let mut h = Harness::start(vec![Ok(transport)]);
+        server.hears().await;
+        h.sign_in(&mut server, "me").await;
+
+        server.say(ServerEvent::Status {
+            sync: SyncStatus::NotInstalled,
+            install_url: Some("https://github.com/apps/x/installations/new".into()),
+        });
+        assert_eq!(
+            h.next().await,
+            SessionUpdate::Sync {
+                status: SyncStatus::NotInstalled,
+                install_url: Some("https://github.com/apps/x/installations/new".into())
+            }
+        );
+        server.say(ServerEvent::Status {
+            sync: SyncStatus::Ok,
+            install_url: None,
+        });
+        assert_eq!(
+            h.next().await,
+            SessionUpdate::Sync {
+                status: SyncStatus::Ok,
+                install_url: None
             }
         );
     }

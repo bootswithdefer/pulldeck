@@ -9,7 +9,7 @@
 
 use crate::models::{ChecksStatus, PullRequest, ReviewStatus};
 use crate::session::{
-    ClientCommand, Notification, NotificationKind, PrRef, ServerEvent, SessionToken,
+    ClientCommand, Notification, NotificationKind, PrRef, ServerEvent, SessionToken, SyncStatus,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -134,6 +134,18 @@ pub enum WireKind {
     Other,
 }
 
+/// Whether the server can read the user's pull requests. `Other` is a state a newer server added;
+/// it is treated like `Ok`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WireSync {
+    Ok,
+    NeedsSignin,
+    NotInstalled,
+    #[serde(other)]
+    Other,
+}
+
 /// What the client sends.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -218,6 +230,11 @@ pub enum ServerMsg {
         #[serde(default)]
         viewing: Option<PrKey>,
     },
+    Status {
+        sync: WireSync,
+        #[serde(default)]
+        install_url: Option<String>,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -270,6 +287,15 @@ impl ServerMsg {
                 login,
                 online,
                 viewing: viewing.map(PrRef::from),
+            },
+            Self::Status { sync, install_url } => ServerEvent::Status {
+                sync: match sync {
+                    WireSync::NeedsSignin => SyncStatus::NeedsSignin,
+                    WireSync::NotInstalled => SyncStatus::NotInstalled,
+                    WireSync::Ok | WireSync::Other => SyncStatus::Ok,
+                },
+                // The link is opened in a browser, so only accept a plain https one.
+                install_url: install_url.filter(|url| url.starts_with("https://")),
             },
             Self::Unknown => return None,
         })
@@ -480,6 +506,55 @@ mod tests {
         };
         assert_eq!(pr.review, ReviewStatus::None);
         assert_eq!(pr.checks, ChecksStatus::None);
+    }
+
+    fn status_event(frame: &str) -> ServerEvent {
+        decode(frame).unwrap().into_event().unwrap()
+    }
+
+    #[test]
+    fn status_frames_map_to_sync_states() {
+        let signin = status_event(r#"{"type":"status","sync":"needs_signin","install_url":null}"#);
+        assert_eq!(
+            signin,
+            ServerEvent::Status {
+                sync: SyncStatus::NeedsSignin,
+                install_url: None
+            }
+        );
+        let missing = status_event(r#"{"type":"status","sync":"not_installed"}"#);
+        assert_eq!(
+            missing,
+            ServerEvent::Status {
+                sync: SyncStatus::NotInstalled,
+                install_url: None
+            }
+        );
+    }
+
+    #[test]
+    fn an_unknown_sync_state_counts_as_ok() {
+        let event = status_event(r#"{"type":"status","sync":"rate_limited"}"#);
+        assert_eq!(
+            event,
+            ServerEvent::Status {
+                sync: SyncStatus::Ok,
+                install_url: None
+            }
+        );
+    }
+
+    #[test]
+    fn only_an_https_install_link_is_kept() {
+        let plain =
+            r#"{"type":"status","sync":"not_installed","install_url":"http://example.com"}"#;
+        let script = r#"{"type":"status","sync":"not_installed","install_url":"javascript:1"}"#;
+        for frame in [plain, script] {
+            let ServerEvent::Status { install_url, .. } = status_event(frame) else {
+                panic!("not a status");
+            };
+            assert_eq!(install_url, None, "{frame}");
+        }
     }
 
     #[test]
