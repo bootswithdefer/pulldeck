@@ -256,7 +256,7 @@ ApplicationWindow {
                 clip: true
                 model: backend
                 spacing: 1
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: ListScrollBar {}
 
                 Label {
                     anchors.centerIn: parent
@@ -279,6 +279,8 @@ ApplicationWindow {
                     required property real updatedAt
                     required property bool serverBacked
                     width: ListView.view.width
+                    // Leave room for the scroll bar, which is drawn over the list, when the list is long enough to have one.
+                    rightPadding: 12 + (ListView.view.contentHeight > ListView.view.height ? 14 : 0)
                     onClicked: {
                         backend.viewing(row.repo, row.number);
                         Qt.openUrlExternally(row.url);
@@ -352,7 +354,7 @@ ApplicationWindow {
                 clip: true
                 model: reviews
                 spacing: 1
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: ListScrollBar {}
 
                 Label {
                     anchors.centerIn: parent
@@ -373,6 +375,8 @@ ApplicationWindow {
                     required property string checks
                     required property real updatedAt
                     width: ListView.view.width
+                    // Leave room for the scroll bar, which is drawn over the list, when the list is long enough to have one.
+                    rightPadding: 12 + (ListView.view.contentHeight > ListView.view.height ? 14 : 0)
                     onClicked: Qt.openUrlExternally(request.url)
 
                     contentItem: RowLayout {
@@ -421,7 +425,7 @@ ApplicationWindow {
                 clip: true
                 model: history
                 spacing: 1
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: ListScrollBar {}
 
                 Label {
                     anchors.centerIn: parent
@@ -438,6 +442,8 @@ ApplicationWindow {
                     required property string url
                     required property real updatedAt
                     width: ListView.view.width
+                    // Leave room for the scroll bar, which is drawn over the list, when the list is long enough to have one.
+                    rightPadding: 12 + (ListView.view.contentHeight > ListView.view.height ? 14 : 0)
                     onClicked: Qt.openUrlExternally(past.url)
 
                     contentItem: RowLayout {

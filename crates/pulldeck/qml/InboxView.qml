@@ -19,7 +19,7 @@ ListView {
 
     clip: true
     spacing: 1
-    ScrollBar.vertical: ScrollBar {}
+    ScrollBar.vertical: ListScrollBar {}
 
     Label {
         anchors.centerIn: parent
@@ -55,6 +55,8 @@ ListView {
         }
 
         width: ListView.view.width
+        // Leave room for the scroll bar, which is drawn over the list, when the list is long enough to have one.
+        rightPadding: 12 + (ListView.view.contentHeight > ListView.view.height ? 14 : 0)
         onClicked: {
             view.acknowledge(row.notificationId);
             Qt.openUrlExternally("https://github.com/" + row.repo + "/pull/" + row.number);

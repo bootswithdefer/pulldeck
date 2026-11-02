@@ -8,6 +8,7 @@ fn main() {
             .qml_file("qml/main.qml")
             .qml_file("qml/Badge.qml")
             .qml_file("qml/InboxView.qml")
+            .qml_file("qml/ListScrollBar.qml")
             .qml_file("qml/SignInDialog.qml")
             .qml_file("qml/ActionDialog.qml"),
     )
