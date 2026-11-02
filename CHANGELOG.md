@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/bootswithdefer/pulldeck/compare/v0.1.1...v0.2.0) - 2026-11-02
+
+### Added
+
+- Carry the optional features list on hello frames
+- Add an opt-in presence setting
+- Show when the server cannot read your pull requests
+- Treat the server as optional and merge its pull requests with polled ones
+- Show a desktop notification for each new inbox item
+- Add a tab for pull requests waiting for your review
+- Notify when a review is requested from you on GitHub
+- Add a system tray icon that lights up when something is waiting
+- Add a History tab with recently merged and closed pull requests
+- Notify when checks fail or a review lands on your pull requests
+- Add a notifications switch and an ignore list for repositories
+- Add an app icon and Arch and Flatpak packaging
+
+### Fixed
+
+- Retry GitHub requests that fail with a gateway error
+- Report a failed UI load and exit with an error
+
 ## [0.1.1](https://github.com/bootswithdefer/pulldeck/compare/v0.1.0...v0.1.1) - 2026-11-01
 
 ### Added
