@@ -4,6 +4,7 @@
 //! only inserts, removes or updates the rows that changed (see `pulldeck_core::store::diff`).
 
 use crate::inbox::InboxModelRust;
+use crate::reviews::ReviewModelRust;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QVariant};
 use pulldeck_core::session::ClientCommand;
@@ -149,6 +150,15 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "attachInbox"]
         unsafe fn attach_inbox(self: Pin<&mut PrBackend>, inbox: *mut InboxModel);
+
+        /// Give the backend the model that lists pull requests waiting for the user's review.
+        ///
+        /// # Safety
+        ///
+        /// `reviews` must be null or point to a live `ReviewModel`.
+        #[qinvokable]
+        #[cxx_name = "attachReviews"]
+        unsafe fn attach_reviews(self: Pin<&mut PrBackend>, reviews: *mut ReviewModel);
     }
 
     // QAbstractListModel virtuals.
@@ -280,6 +290,41 @@ pub mod qobject {
         unsafe fn end_insert_rows(self: Pin<&mut InboxModel>);
     }
 
+    // Pull requests waiting for the user's review; state and behaviour in `reviews.rs`.
+    impl cxx_qt::Threading for ReviewModel {}
+
+    unsafe extern "RustQt" {
+        #[qobject]
+        #[base = QAbstractListModel]
+        #[qml_element]
+        #[qproperty(i32, count)]
+        #[namespace = "pulldeck"]
+        type ReviewModel = super::ReviewModelRust;
+
+        #[qinvokable]
+        #[cxx_override]
+        fn data(self: &ReviewModel, index: &QModelIndex, role: i32) -> QVariant;
+
+        #[qinvokable]
+        #[cxx_override]
+        #[cxx_name = "roleNames"]
+        fn role_names(self: &ReviewModel) -> QHash_i32_QByteArray;
+
+        #[qinvokable]
+        #[cxx_override]
+        #[cxx_name = "rowCount"]
+        fn row_count(self: &ReviewModel, parent: &QModelIndex) -> i32;
+
+        /// Wraps replacing the whole list.
+        #[inherit]
+        #[cxx_name = "beginResetModel"]
+        fn review_begin_reset_model(self: Pin<&mut ReviewModel>);
+        /// Pairs with `review_begin_reset_model`.
+        #[inherit]
+        #[cxx_name = "endResetModel"]
+        fn review_end_reset_model(self: Pin<&mut ReviewModel>);
+    }
+
     unsafe extern "RustQt" {
         /// Emitted when the data of existing inbox rows changes.
         #[inherit]
@@ -360,6 +405,8 @@ pub struct PrBackendRust {
     /// Where server notifications go. In an `Arc` because cxx-qt needs this struct to be `Unpin`
     /// and a bare `CxxQtThread` is not.
     pub(crate) inbox: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::InboxModel>>>,
+    /// Where pull requests awaiting the user's review go.
+    pub(crate) reviews: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::ReviewModel>>>,
 }
 
 impl Default for PrBackendRust {
@@ -387,6 +434,7 @@ impl Default for PrBackendRust {
             poll: true,
             commands: None,
             inbox: None,
+            reviews: None,
         }
     }
 }
@@ -402,14 +450,31 @@ pub(crate) fn runtime() -> &'static Runtime {
     })
 }
 
-/// Everything the UI needs from one fetch, already stringly-typed.
-type Fetched = Result<(String, Vec<PullRequest>), String>;
+/// Everything the UI needs from one fetch, already stringly-typed. The two searches are
+/// independent: GitHub failing one (its search times out at times) must not hide the other.
+struct Fetched {
+    authored: Result<(String, Vec<PullRequest>), String>,
+    /// `None` when that search failed, so the last list stays.
+    reviews: Option<Vec<PullRequest>>,
+}
 
 async fn fetch() -> Fetched {
-    let client = GitHubClient::from_environment()
-        .await
-        .map_err(|e| e.to_string())?;
-    client.authored_prs().await.map_err(|e| e.to_string())
+    let client = match GitHubClient::from_environment().await {
+        Ok(client) => client,
+        Err(e) => {
+            return Fetched {
+                authored: Err(e.to_string()),
+                reviews: None,
+            }
+        }
+    };
+    let (authored, reviews) = tokio::join!(client.authored_prs(), client.review_requests());
+    Fetched {
+        authored: authored.map_err(|e| e.to_string()),
+        reviews: reviews
+            .map_err(|error| tracing::warn!(%error, "could not fetch review requests"))
+            .ok(),
+    }
 }
 
 impl qobject::PrBackend {
@@ -425,9 +490,12 @@ impl qobject::PrBackend {
 
         let qt_thread = self.qt_thread();
         runtime().spawn(async move {
-            let result = fetch().await;
+            let fetched = fetch().await;
             let queued = qt_thread.queue(move |mut backend| {
-                match result {
+                if let (Some(model), Some(reviews)) = (&backend.reviews, fetched.reviews) {
+                    model.queue(move |mut m| m.as_mut().replace(reviews)).ok();
+                }
+                match fetched.authored {
                     Ok((login, prs)) => {
                         // A server session knows who you are better than a token on this machine.
                         if !*backend.server_configured() {

@@ -33,6 +33,8 @@
   and request review, nudge and message actions on the pull requests the server can see.
   Pull requests it cannot see (for example in an organisation that has not installed its GitHub
   App) keep being polled and are merged into the same list.
+- **Review requested tab** lists open pull requests where GitHub asks you personally for a
+  review (not through a team), polled together with your own.
 - **Desktop notifications** for things other users send you (review requests, nudges, messages),
   shown as they arrive. Turn them off with `notifications = false` in
   `~/.config/pulldeck/config.toml`.
@@ -126,7 +128,7 @@ flowchart LR
 
 ## Roadmap
 
-- [ ] Review-requested tab
+- [x] Review-requested tab (requests made directly to you)
 - [x] Desktop notifications for inbox items
 - [ ] Desktop notifications for CI failures and approvals
 - [ ] Show other people's presence

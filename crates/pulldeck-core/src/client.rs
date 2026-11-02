@@ -75,13 +75,24 @@ impl GitHubClient {
     ///
     /// Returns the viewer's login together with the PRs, newest first.
     pub async fn authored_prs(&self) -> Result<(String, Vec<PullRequest>)> {
+        self.search("author:@me").await
+    }
+
+    /// Fetches all open pull requests where a review is requested from the authenticated user,
+    /// directly (not through a team: an organisation's teams can ask for hundreds), newest first.
+    pub async fn review_requests(&self) -> Result<Vec<PullRequest>> {
+        Ok(self.search("user-review-requested:@me").await?.1)
+    }
+
+    /// Runs a pull request search for `qualifier` over open, unarchived pull requests.
+    async fn search(&self, qualifier: &str) -> Result<(String, Vec<PullRequest>)> {
         let mut prs = Vec::new();
         let mut after: Option<String> = None;
 
         let login = loop {
             let body = json!({
                 "query": AUTHORED_QUERY,
-                "variables": { "q": "is:pr is:open archived:false author:@me sort:updated-desc", "after": after },
+                "variables": { "q": format!("is:pr is:open archived:false {qualifier} sort:updated-desc"), "after": after },
             });
             let response = self.post(&body).await?;
 
@@ -104,9 +115,12 @@ impl GitHubClient {
         let mut attempt = 1;
         loop {
             let failure = match self.http.post(&self.endpoint).json(body).send().await {
-                Ok(response) if response.status().is_success() => {
-                    return Ok(response.json().await?);
-                }
+                Ok(response) if response.status().is_success() => match response.json().await {
+                    Ok(body) => return Ok(body),
+                    // The connection broke or timed out while the body was arriving.
+                    Err(e) if e.is_timeout() || e.is_body() || e.is_decode() => Error::Http(e),
+                    Err(e) => return Err(e.into()),
+                },
                 Ok(response) if is_gateway_error(response.status()) => Error::Api(format!(
                     "GitHub answered HTTP {}",
                     response.status().as_u16()
@@ -218,7 +232,7 @@ fn parse_pr(node: &Value) -> Option<PullRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::method;
+    use wiremock::matchers::{body_string_contains, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn client_for(server: &MockServer) -> GitHubClient {
@@ -233,6 +247,20 @@ mod tests {
             "viewer": {"login": "octocat"},
             "search": {"pageInfo": {"hasNextPage": false, "endCursor": null}, "nodes": []}
         }})
+    }
+
+    #[tokio::test]
+    async fn review_requests_search_for_requests_to_the_viewer_not_their_own_prs() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(body_string_contains("user-review-requested:@me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(one_page()))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let prs = client_for(&server).review_requests().await.unwrap();
+        assert!(prs.is_empty());
     }
 
     #[tokio::test]
@@ -251,6 +279,23 @@ mod tests {
         let (login, prs) = client_for(&server).authored_prs().await.unwrap();
         assert_eq!(login, "octocat");
         assert!(prs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_response_cut_off_mid_body_is_retried() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{\"data\": {"))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(one_page()))
+            .mount(&server)
+            .await;
+
+        let (login, _) = client_for(&server).authored_prs().await.unwrap();
+        assert_eq!(login, "octocat");
     }
 
     #[tokio::test]

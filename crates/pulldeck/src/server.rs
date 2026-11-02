@@ -97,6 +97,18 @@ fn describe(update: &SessionUpdate) -> String {
 }
 
 impl qobject::PrBackend {
+    /// Gives the backend the review-request list so polling can fill it.
+    ///
+    /// # Safety
+    ///
+    /// `reviews` must be null or point to a live `ReviewModel` (QML guarantees this).
+    pub unsafe fn attach_reviews(mut self: Pin<&mut Self>, reviews: *mut qobject::ReviewModel) {
+        // SAFETY: the caller guarantees the pointer is null or valid.
+        if let Some(reviews) = unsafe { reviews.as_ref() } {
+            self.as_mut().rust_mut().reviews = Some(Arc::new(reviews.qt_thread()));
+        }
+    }
+
     /// Gives the backend the inbox so notifications from a server session can reach it. QML
     /// calls this once at startup, before any session starts.
     ///

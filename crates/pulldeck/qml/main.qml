@@ -21,6 +21,10 @@ ApplicationWindow {
         id: inbox
     }
 
+    ReviewModel {
+        id: reviews
+    }
+
     SignInDialog {
         id: signIn
         deck: backend
@@ -37,6 +41,7 @@ ApplicationWindow {
     Component.onCompleted: {
         // The inbox must be attached before a server session can start delivering to it.
         backend.attachInbox(inbox);
+        backend.attachReviews(reviews);
         backend.refresh();
     }
 
@@ -152,6 +157,9 @@ ApplicationWindow {
                 text: qsTr("Pull requests")
             }
             TabButton {
+                text: qsTr("Review requested") + (reviews.count > 0 ? " (" + reviews.count + ")" : "")
+            }
+            TabButton {
                 text: qsTr("Inbox") + (inbox.unread > 0 ? " (" + inbox.unread + ")" : "")
             }
         }
@@ -252,6 +260,68 @@ ApplicationWindow {
                                     onTriggered: actions.show("message", row.repo, row.number)
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            ListView {
+                id: reviewList
+                clip: true
+                model: reviews
+                spacing: 1
+                ScrollBar.vertical: ScrollBar {}
+
+                Label {
+                    anchors.centerIn: parent
+                    visible: reviewList.count === 0
+                    text: qsTr("Nobody is waiting for your review")
+                    opacity: 0.6
+                }
+
+                delegate: ItemDelegate {
+                    id: request
+                    required property string title
+                    required property string repo
+                    required property int number
+                    required property string url
+                    required property string author
+                    required property bool isDraft
+                    required property string review
+                    required property string checks
+                    required property real updatedAt
+                    width: ListView.view.width
+                    onClicked: Qt.openUrlExternally(request.url)
+
+                    contentItem: RowLayout {
+                        spacing: 12
+
+                        ColumnLayout {
+                            spacing: 2
+                            Layout.fillWidth: true
+
+                            Label {
+                                text: (request.isDraft ? qsTr("[draft] ") : "") + request.title
+                                font.bold: true
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Label {
+                                text: request.repo + " #" + request.number + qsTr(" by ") + request.author
+                                opacity: 0.65
+                                font.pointSize: Application.font.pointSize - 1
+                            }
+                        }
+
+                        Badge {
+                            kind: "checks"
+                            value: request.checks
+                        }
+                        Label {
+                            text: backend.ago(request.updatedAt, root.now)
+                            opacity: 0.6
+                            Layout.minimumWidth: 70
+                            horizontalAlignment: Text.AlignRight
                         }
                     }
                 }

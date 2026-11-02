@@ -6,6 +6,7 @@ mod backend;
 mod demo;
 mod inbox;
 mod notify;
+mod reviews;
 mod server;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
