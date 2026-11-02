@@ -154,6 +154,9 @@ pub enum ClientMsg {
         token: WireToken,
         #[serde(default)]
         last_seq: Option<u64>,
+        /// Optional protocol features this client understands. None are used yet.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        features: Vec<String>,
     },
     RequestReview {
         request_id: String,
@@ -191,6 +194,9 @@ pub enum ServerMsg {
     Hello {
         version: u32,
         login: String,
+        /// Features the server offers. None exist yet, so this is only carried.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        features: Vec<String>,
     },
     Snapshot {
         seq: u64,
@@ -308,6 +314,7 @@ impl From<&ClientCommand> for ClientMsg {
             ClientCommand::Hello { token, last_seq } => Self::Hello {
                 token: WireToken(token.expose().to_owned()),
                 last_seq: *last_seq,
+                features: Vec::new(),
             },
             ClientCommand::RequestReview { request_id, pr, to } => Self::RequestReview {
                 request_id: request_id.clone(),

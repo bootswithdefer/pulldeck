@@ -1,6 +1,8 @@
 [
   {"name": "client hello", "direction": "client",
    "frame": {"type": "hello", "token": "tok", "last_seq": 12}},
+  {"name": "client hello with features", "direction": "client",
+   "frame": {"type": "hello", "token": "tok", "last_seq": null, "features": ["x-future"]}},
   {"name": "client request_review", "direction": "client",
    "frame": {"type": "request_review", "request_id": "r1", "pr": {"repo": "o/r", "number": 7}, "to": "hubot"}},
   {"name": "client nudge", "direction": "client",
@@ -14,6 +16,8 @@
 
   {"name": "server hello", "direction": "server",
    "frame": {"type": "hello", "version": 1, "login": "octocat"}},
+  {"name": "server hello with features", "direction": "server",
+   "frame": {"type": "hello", "version": 1, "login": "octocat", "features": ["x-future"]}},
   {"name": "server snapshot", "direction": "server",
    "frame": {"type": "snapshot", "seq": 3, "prs": [{
      "number": 7, "title": "Add thing", "url": "https://github.com/o/r/pull/7", "repo": "o/r",
