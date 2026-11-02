@@ -22,6 +22,7 @@ chrono.workspace = true
 cxx.workspace = true
 cxx-qt.workspace = true
 cxx-qt-lib.workspace = true
+ksni = "0.3.7"
 notify-rust = "4.18.2"
 pulldeck-core = { path = "../pulldeck-core", version = "0.1.1" }
 tokio.workspace = true

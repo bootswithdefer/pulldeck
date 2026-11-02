@@ -25,6 +25,14 @@ pub mod qobject {
     }
 
     unsafe extern "C++" {
+        include!("pulldeck/cpp/app.h");
+        /// Whether closing the last window ends the program (Qt's default is yes).
+        #[namespace = "pulldeck"]
+        #[rust_name = "set_quit_on_last_window_closed"]
+        fn setQuitOnLastWindowClosed(quit: bool);
+    }
+
+    unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
 
@@ -99,6 +107,26 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "setPresenceEnabled"]
         fn set_presence_enabled(self: Pin<&mut Self>, enabled: bool);
+
+        /// Put the icon in the system tray, if the desktop has one.
+        #[qinvokable]
+        #[cxx_name = "startTray"]
+        fn start_tray(self: Pin<&mut Self>);
+
+        /// What the tray icon shows: lit when `attention`, with `tooltip` on hover.
+        #[qinvokable]
+        #[cxx_name = "setTrayState"]
+        fn set_tray_state(self: Pin<&mut Self>, attention: bool, tooltip: &QString);
+
+        /// The tray icon was clicked: show the window if hidden, hide it if shown.
+        #[qsignal]
+        #[cxx_name = "trayToggleRequested"]
+        fn tray_toggle_requested(self: Pin<&mut Self>);
+
+        /// "Quit" was chosen in the tray menu.
+        #[qsignal]
+        #[cxx_name = "trayQuitRequested"]
+        fn tray_quit_requested(self: Pin<&mut Self>);
 
         /// The user opened this PR. Sent to the server only if presence is on.
         #[qinvokable]
@@ -407,6 +435,10 @@ pub struct PrBackendRust {
     pub(crate) inbox: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::InboxModel>>>,
     /// Where pull requests awaiting the user's review go.
     pub(crate) reviews: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::ReviewModel>>>,
+    /// The tray icon, once the desktop accepted it, and what it should show.
+    pub(crate) tray: Option<crate::tray::TrayHandle>,
+    pub(crate) tray_attention: bool,
+    pub(crate) tray_tooltip: String,
 }
 
 impl Default for PrBackendRust {
@@ -435,6 +467,9 @@ impl Default for PrBackendRust {
             commands: None,
             inbox: None,
             reviews: None,
+            tray: None,
+            tray_attention: false,
+            tray_tooltip: String::new(),
         }
     }
 }

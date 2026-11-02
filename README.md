@@ -15,8 +15,8 @@
 </div>
 
 > **Status:** early. pulldeck lists your open PRs on its own. With an optional pulldeck server it
-> also gets live updates and lets you nudge, message and ask teammates for reviews. A tray icon and
-> history are on the [roadmap](#roadmap).
+> also gets live updates and lets you nudge, message and ask teammates for reviews. Merged and closed
+> history is on the [roadmap](#roadmap).
 
 ## Features
 
@@ -35,6 +35,7 @@
   App) keep being polled and are merged into the same list.
 - **Review requested tab** lists open pull requests where GitHub asks you personally for a
   review (not through a team), polled together with your own.
+- **Tray icon** that turns orange when something is waiting; closing the window hides it there.
 - **Desktop notifications** for things other users send you (review requests, nudges, messages)
   and for review requests that appear on GitHub between polls, shown as they arrive. Turn them off with `notifications = false` in
   `~/.config/pulldeck/config.toml`.
@@ -132,7 +133,8 @@ flowchart LR
 - [x] Desktop notifications for inbox items
 - [ ] Desktop notifications for CI failures and approvals
 - [ ] Show other people's presence
-- [ ] System tray icon with attention state
+- [x] System tray icon with attention state (StatusNotifierItem: KDE, COSMIC, and GNOME with an
+  extension)
 - [ ] Merged/closed history
 - [ ] Settings and filters (config in `~/.config/pulldeck/`)
 - [ ] Packaging: AUR, Flatpak

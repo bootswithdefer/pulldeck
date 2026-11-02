@@ -35,6 +35,59 @@ ApplicationWindow {
         deck: backend
     }
 
+    // How many review requests the user has looked at. A rise while the window is not in front
+    // lights the tray icon, so a hidden app still says something is waiting.
+    property int seenReviews: 0
+    readonly property bool needsAttention: inbox.unread > 0 || reviews.count > seenReviews
+
+    onActiveChanged: {
+        if (active) {
+            seenReviews = reviews.count;
+        }
+    }
+
+    Connections {
+        target: reviews
+
+        function onCountChanged(): void {
+            if (root.active) {
+                root.seenReviews = reviews.count;
+            }
+        }
+    }
+
+    readonly property string trayTooltip: qsTr("pulldeck: %1 unread, %2").arg(inbox.unread).arg(reviews.count === 1 ? qsTr("1 review request") : qsTr("%1 review requests").arg(reviews.count))
+
+    onNeedsAttentionChanged: syncTray()
+    onTrayTooltipChanged: syncTray()
+
+    function syncTray(): void {
+        backend.setTrayState(needsAttention, trayTooltip);
+    }
+
+    // The tray icon is drawn by the backend; it only asks for these.
+    Connections {
+        target: backend
+
+        function onTrayToggleRequested(): void {
+            root.toggle();
+        }
+
+        function onTrayQuitRequested(): void {
+            Qt.quit();
+        }
+    }
+
+    function toggle(): void {
+        if (visible) {
+            hide();
+        } else {
+            show();
+            raise();
+            requestActivate();
+        }
+    }
+
     // Unix seconds, ticked so the "5m ago" labels stay current between refreshes.
     property real now: Date.now() / 1000
 
@@ -42,6 +95,9 @@ ApplicationWindow {
         // The inbox must be attached before a server session can start delivering to it.
         backend.attachInbox(inbox);
         backend.attachReviews(reviews);
+        // With a tray, closing the window hides it; without one (a bare window manager) it quits.
+        syncTray();
+        backend.startTray();
         backend.refresh();
     }
 

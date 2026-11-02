@@ -8,6 +8,7 @@ mod inbox;
 mod notify;
 mod reviews;
 mod server;
+mod tray;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 use tracing_subscriber::EnvFilter;
