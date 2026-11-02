@@ -4,6 +4,10 @@ changelog_config = "cliff.toml"
 # Not publishing to crates.io from CI yet. To enable: add a CARGO_REGISTRY_TOKEN secret,
 # pass it to the release job in .github/workflows/release-plz.yml, and set this to true.
 publish = false
+# Find the last release from git tags, not crates.io. Without this, release-plz compares with the
+# registry (still at 0.1.0), decides the 0.1.1 in Cargo.toml is an unpublished release, and says
+# "already up-to-date" instead of opening a release PR.
+git_only = true
 git_release_enable = true
 git_release_type = "auto"
 # One tag per release for the whole workspace: v1.2.3
