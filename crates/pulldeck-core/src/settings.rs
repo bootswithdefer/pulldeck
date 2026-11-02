@@ -25,7 +25,7 @@ pub enum SettingsError {
 }
 
 /// What the user can configure.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     /// Address of a pulldeck server, e.g. `https://pulldeck.example.com`. Without one the app
@@ -33,6 +33,18 @@ pub struct Settings {
     pub server_url: Option<String>,
     /// Tell other users which PR you are looking at. Off unless the user turns it on.
     pub presence: bool,
+    /// Show a desktop notification when another user sends you something. On unless turned off.
+    pub notifications: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            server_url: None,
+            presence: false,
+            notifications: true,
+        }
+    }
 }
 
 impl Settings {
@@ -183,6 +195,7 @@ mod tests {
         let s = Settings::default();
         assert_eq!(s.server_url, None);
         assert!(!s.presence);
+        assert!(s.notifications);
         assert_eq!(s.server().unwrap(), None);
     }
 
@@ -200,6 +213,7 @@ mod tests {
         let settings = Settings {
             server_url: Some("https://deck.example.com".into()),
             presence: true,
+            notifications: false,
         };
         settings.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path).unwrap(), settings);

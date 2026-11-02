@@ -51,6 +51,7 @@ impl qobject::InboxModel {
             self.as_mut()
                 .begin_insert_rows(&QModelIndex::default(), 0, 0)
         };
+        crate::notify::announce(&notification);
         self.as_mut().rust_mut().inbox.insert(notification);
         unsafe { self.as_mut().end_insert_rows() };
         self.as_mut().refresh_unread();

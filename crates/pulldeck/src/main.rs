@@ -5,6 +5,7 @@ mod backend;
 #[cfg(feature = "demo")]
 mod demo;
 mod inbox;
+mod notify;
 mod server;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};

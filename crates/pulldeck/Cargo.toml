@@ -15,13 +15,14 @@ build = "build.rs"
 [features]
 # A scripted fake server for developing the collaboration UI (see src/demo.rs, `just demo`).
 # Off by default: never part of a release build.
-demo = ["dep:chrono"]
+demo = []
 
 [dependencies]
-chrono = { workspace = true, optional = true }
+chrono.workspace = true
 cxx.workspace = true
 cxx-qt.workspace = true
 cxx-qt-lib.workspace = true
+notify-rust = "4.18.2"
 pulldeck-core = { path = "../pulldeck-core", version = "0.1.1" }
 tokio.workspace = true
 tracing.workspace = true

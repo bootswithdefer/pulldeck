@@ -33,6 +33,9 @@
   and request review, nudge and message actions on the pull requests the server can see.
   Pull requests it cannot see (for example in an organisation that has not installed its GitHub
   App) keep being polled and are merged into the same list.
+- **Desktop notifications** for things other users send you (review requests, nudges, messages),
+  shown as they arrive. Turn them off with `notifications = false` in
+  `~/.config/pulldeck/config.toml`.
 - **Presence is opt-in**: telling others which PR you are viewing is off unless you turn it on.
 - **Native look**: Qt 6 with the Fusion style, which follows your KDE colour scheme.
 
@@ -124,7 +127,8 @@ flowchart LR
 ## Roadmap
 
 - [ ] Review-requested tab
-- [ ] Desktop notifications (review requests, CI failures, approvals, inbox items)
+- [x] Desktop notifications for inbox items
+- [ ] Desktop notifications for CI failures and approvals
 - [ ] Show other people's presence
 - [ ] System tray icon with attention state
 - [ ] Merged/closed history
