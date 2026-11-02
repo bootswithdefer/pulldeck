@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/bootswithdefer/pulldeck/compare/v0.2.0...v0.3.0) - 2026-11-02
+
+### Added
+
+- Group stacked pull requests
+
+### Fixed
+
+- Make the list scroll bars visible and keep them off the text
+
 ## [0.2.0](https://github.com/bootswithdefer/pulldeck/compare/v0.1.1...v0.2.0) - 2026-11-02
 
 ### Added
