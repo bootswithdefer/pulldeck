@@ -11,7 +11,6 @@ here has been run, and these are the known gaps:
   `rust-stable` SDK extension may be older or newer than that; check before building.
 - **Qt.** `cxx-qt` finds Qt through `qmake`. The KDE SDK has it, but the Qt version
   (`runtime-version`) has to match what the app was written for (Qt 6).
-- **Tag.** The manifest builds `v0.1.1`, which has no app icon. Use a later tag.
 - **Sandbox.** The app polls GitHub with a token from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`.
   Inside the sandbox there is no `gh` and no environment, so standalone polling needs a way to
   hand it a token (for example `flatpak override --env=GH_TOKEN=...`) until a sign-in flow

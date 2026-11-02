@@ -40,6 +40,6 @@ modules:
     sources:
       - type: git
         url: https://github.com/bootswithdefer/pulldeck.git
-        tag: v0.1.1
+        tag: v0.2.0
       # Generated, not checked in: see README.md.
       - cargo-sources.json

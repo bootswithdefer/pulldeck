@@ -3,7 +3,7 @@
 # Builds pulldeck from a release tag. To update: set pkgver to the new release, run
 # `updpkgsums`, then `makepkg -si`. `packaging/aur/README.md` has the details.
 pkgname=pulldeck
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='GitHub pull request tracker for KDE and other desktops (Rust + Qt)'
 arch=('x86_64' 'aarch64')
@@ -19,7 +19,7 @@ optdepends=(
 # makepkg's default LTO compiles the C++ bridge code to GCC bitcode, which rust-lld cannot link.
 options=('!lto')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('6fde5465c8bd70a38a123a3f82139d2dbb6cd76d90e6123c2ede93d3c2153c42')
+sha256sums=('10aee9298cd46ab61a245e46759c4194f24a0d253f2e7b1eb1d568d325e226dc')
 
 prepare() {
   cd "$pkgname-$pkgver"
@@ -44,10 +44,7 @@ package() {
   cd "$pkgname-$pkgver"
   install -Dm755 target/release/pulldeck "$pkgdir/usr/bin/pulldeck"
   install -Dm644 packaging/pulldeck.desktop "$pkgdir/usr/share/applications/pulldeck.desktop"
-  # Releases before 0.1.2 have no icon.
-  if [ -f packaging/pulldeck.svg ]; then
-    install -Dm644 packaging/pulldeck.svg \
-      "$pkgdir/usr/share/icons/hicolor/scalable/apps/pulldeck.svg"
-  fi
+  install -Dm644 packaging/pulldeck.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/pulldeck.svg"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
