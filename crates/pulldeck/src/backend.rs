@@ -8,9 +8,10 @@ use crate::pr_list::PrListModelRust;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QVariant};
 use pulldeck_core::session::ClientCommand;
+use pulldeck_core::stack::{self, StackPlace};
 use pulldeck_core::store::{self, Change};
 use pulldeck_core::{GitHubClient, PullRequest};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
@@ -415,6 +416,9 @@ const REVIEW: i32 = 0x106;
 const CHECKS: i32 = 0x107;
 const UPDATED_AT: i32 = 0x108;
 const SERVER_BACKED: i32 = 0x109;
+const STACK_DEPTH: i32 = 0x10A;
+const STACK_POSITION: i32 = 0x10B;
+const STACK_SIZE: i32 = 0x10C;
 
 /// Backing state for [`qobject::PrBackend`].
 pub struct PrBackendRust {
@@ -446,6 +450,8 @@ pub struct PrBackendRust {
     polled: Vec<PullRequest>,
     /// Which shown rows the server tracks; only those can take server actions.
     backed: HashSet<(String, u64)>,
+    /// Where shown rows sit in a stack of pull requests; rows in no stack are absent.
+    stacks: HashMap<stack::PrKey, StackPlace>,
     /// Whether to poll GitHub. Off for the demo and for a development server, so that fake
     /// accounts are not mixed with real pull requests.
     pub(crate) poll: bool,
@@ -488,6 +494,7 @@ impl Default for PrBackendRust {
             server: Vec::new(),
             polled: Vec::new(),
             backed: HashSet::new(),
+            stacks: HashMap::new(),
             poll: true,
             commands: None,
             inbox: None,
@@ -630,27 +637,33 @@ impl qobject::PrBackend {
     fn rebuild(mut self: Pin<&mut Self>) {
         let mut merged = store::merge(&self.server, &self.polled);
         merged.retain(|p| !self.filters.ignores(&p.repo));
+        // Stacked pull requests go together, bottom first.
+        let (merged, stacks) = stack::arrange(merged);
         let backed: HashSet<_> = self
             .server
             .iter()
             .map(|p| (p.repo.clone(), p.number))
             .collect();
         let previously_backed = std::mem::replace(&mut self.as_mut().rust_mut().backed, backed);
+        let previous_stacks = std::mem::replace(&mut self.as_mut().rust_mut().stacks, stacks);
         crate::notify::announce_status_changes(&self.prs, &merged);
         let changes = store::diff(&self.prs, &merged);
         tracing::debug!(
             rows = merged.len(),
             changes = changes.len(),
+            stacked = self.stacks.len(),
             "applying list update"
         );
         self.as_mut().apply_changes(changes);
 
-        // A row can move between "server tracks it" and "only polled" with no change to the
-        // pull request itself, which the diff cannot see.
+        // A row can move between "server tracks it" and "only polled", or into or out of a stack,
+        // with no change to the pull request itself, which the diff cannot see.
         let parent = QModelIndex::default();
         for row in 0..self.prs.len() {
             let key = (self.prs[row].repo.clone(), self.prs[row].number);
-            if previously_backed.contains(&key) != self.backed.contains(&key) {
+            if previously_backed.contains(&key) != self.backed.contains(&key)
+                || previous_stacks.get(&key) != self.stacks.get(&key)
+            {
                 let index = self.index(row as i32, 0, &parent);
                 self.as_mut()
                     .data_changed(&index, &index, &Default::default());
@@ -695,6 +708,10 @@ impl qobject::PrBackend {
         }
     }
 
+    fn stack_of(&self, pr: &PullRequest) -> Option<StackPlace> {
+        self.stacks.get(&stack::key(pr)).copied()
+    }
+
     pub fn row_count(&self, _parent: &QModelIndex) -> i32 {
         self.prs.len() as i32
     }
@@ -712,6 +729,9 @@ impl qobject::PrBackend {
             (CHECKS, "checks"),
             (UPDATED_AT, "updatedAt"),
             (SERVER_BACKED, "serverBacked"),
+            (STACK_DEPTH, "stackDepth"),
+            (STACK_POSITION, "stackPosition"),
+            (STACK_SIZE, "stackSize"),
         ] {
             roles.insert(role, QByteArray::from(name));
         }
@@ -737,6 +757,10 @@ impl qobject::PrBackend {
             CHECKS => text(pr.checks.as_str()),
             UPDATED_AT => QVariant::from(&pr.updated_at.timestamp()),
             SERVER_BACKED => QVariant::from(&self.backed.contains(&(pr.repo.clone(), pr.number))),
+            STACK_DEPTH => QVariant::from(&self.stack_of(pr).map_or(0, |s| s.depth as i32)),
+            STACK_POSITION => QVariant::from(&self.stack_of(pr).map_or(0, |s| s.position as i32)),
+            // 0 for a pull request in no stack, so QML can tell it from a stack of one.
+            STACK_SIZE => QVariant::from(&self.stack_of(pr).map_or(0, |s| s.size as i32)),
             _ => QVariant::default(),
         }
     }

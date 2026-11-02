@@ -33,6 +33,9 @@
   and request review, nudge and message actions on the pull requests the server can see.
   Pull requests it cannot see (for example in an organisation that has not installed its GitHub
   App) keep being polled and are merged into the same list.
+- **Stacked pull requests** are grouped: when one PR targets the branch of another (Graphite,
+  git-town, spr and Sapling all work this way) they are shown together, bottom first, as
+  "stack 2 of 3".
 - **Review requested tab** lists open pull requests where GitHub asks you personally for a
   review (not through a team), polled together with your own.
 - **History tab** with your 50 most recently merged or closed pull requests.

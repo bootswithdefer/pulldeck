@@ -94,6 +94,11 @@ pub struct PullRequest {
     pub checks: ChecksStatus,
     /// Last update time.
     pub updated_at: DateTime<Utc>,
+    /// The branch this PR merges into. Empty when unknown (the server does not send it).
+    pub base_ref: String,
+    /// The branch this PR comes from, for telling stacked PRs apart (see [`crate::stack`]). Empty
+    /// when unknown, and when the branch lives in a fork: it then cannot be another PR's base.
+    pub head_ref: String,
 }
 
 #[cfg(test)]

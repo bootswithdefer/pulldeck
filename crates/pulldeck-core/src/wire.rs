@@ -119,6 +119,8 @@ impl From<WirePr> for PullRequest {
                 WireChecks::None | WireChecks::Other => ChecksStatus::None,
             },
             updated_at: pr.updated_at,
+            base_ref: String::new(),
+            head_ref: String::new(),
         }
     }
 }

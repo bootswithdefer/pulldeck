@@ -78,10 +78,26 @@ pub fn diff(current: &[PullRequest], new: &[PullRequest]) -> Vec<Change> {
 /// The list to show when pull requests come from two places: a server (which tracks only the
 /// repositories its GitHub App is installed on) and the client's own polling of GitHub.
 ///
-/// A pull request in both appears once, as the server's copy. The result is most recently
-/// updated first; on a tie, server copies come first and each source keeps its own order.
+/// A pull request in both appears once, as the server's copy, except that it takes the branch
+/// names from the polled copy: the server does not send them and stacks need them. The result is
+/// most recently updated first; on a tie, server copies come first and each source keeps its own
+/// order.
 pub fn merge(server: &[PullRequest], polled: &[PullRequest]) -> Vec<PullRequest> {
-    let mut merged: Vec<PullRequest> = server.to_vec();
+    let mut merged: Vec<PullRequest> = server
+        .iter()
+        .map(|s| {
+            let mut copy = s.clone();
+            if let Some(p) = polled.iter().find(|p| same(p, s)) {
+                if copy.base_ref.is_empty() {
+                    copy.base_ref.clone_from(&p.base_ref);
+                }
+                if copy.head_ref.is_empty() {
+                    copy.head_ref.clone_from(&p.head_ref);
+                }
+            }
+            copy
+        })
+        .collect();
     merged.extend(
         polled
             .iter()
@@ -118,6 +134,20 @@ mod tests {
     }
 
     #[test]
+    fn the_server_copy_keeps_the_branches_only_the_polled_copy_knows() {
+        let server_copy = pr(1, "from the server");
+        let mut polled_copy = pr(1, "from polling");
+        polled_copy.base_ref = "main".into();
+        polled_copy.head_ref = "feat-1".into();
+
+        let merged = merge(&[server_copy], &[polled_copy]);
+
+        assert_eq!(merged[0].title, "from the server");
+        assert_eq!(merged[0].base_ref, "main");
+        assert_eq!(merged[0].head_ref, "feat-1");
+    }
+
+    #[test]
     fn merge_with_one_empty_side_is_the_other_side() {
         let list = vec![pr(1, "a"), pr(2, "b")];
         assert_eq!(merge(&list, &[]), list);
@@ -136,6 +166,8 @@ mod tests {
             review: ReviewStatus::None,
             checks: ChecksStatus::None,
             updated_at: "2026-01-01T00:00:00Z".parse().unwrap(),
+            base_ref: String::new(),
+            head_ref: String::new(),
         }
     }
 

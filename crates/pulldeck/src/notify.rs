@@ -199,6 +199,8 @@ mod tests {
             review: pulldeck_core::ReviewStatus::None,
             checks: pulldeck_core::ChecksStatus::None,
             updated_at: Utc::now(),
+            base_ref: String::new(),
+            head_ref: String::new(),
         }
     }
 

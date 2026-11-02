@@ -406,6 +406,8 @@ pub(crate) mod fixtures {
             review: ReviewStatus::None,
             checks: ChecksStatus::None,
             updated_at: format!("2026-10-01T12:{minute:02}:00Z").parse().unwrap(),
+            base_ref: String::new(),
+            head_ref: String::new(),
         }
     }
 

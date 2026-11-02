@@ -57,7 +57,17 @@ fn pr(
         review,
         checks,
         updated_at: Utc::now() - ChronoDuration::minutes(minutes_ago),
+        base_ref: String::new(),
+        head_ref: String::new(),
     }
+}
+
+/// Puts `pr` on the branches that make it part of a stack: it merges into `base` and comes from
+/// `head`.
+fn on_branch(mut pr: PullRequest, base: &str, head: &str) -> PullRequest {
+    pr.base_ref = base.into();
+    pr.head_ref = head.into();
+    pr
 }
 
 fn pr_ref(number: u64) -> PrRef {
@@ -147,26 +157,50 @@ async fn script(
     say(ServerEvent::Snapshot {
         seq: 1,
         prs: vec![
-            pr(
-                3,
-                "Add retry to the sync job",
-                ReviewStatus::ReviewRequired,
-                ChecksStatus::Pending,
-                5,
+            // 1, 2 and 3 are a stack: each merges into the branch of the one before.
+            on_branch(
+                pr(
+                    3,
+                    "Add retry to the sync job",
+                    ReviewStatus::ReviewRequired,
+                    ChecksStatus::Pending,
+                    5,
+                ),
+                "login-test",
+                "sync-retry",
             ),
-            pr(
-                2,
-                "Fix flaky login test",
-                ReviewStatus::ChangesRequested,
-                ChecksStatus::Failure,
-                40,
+            on_branch(
+                pr(
+                    2,
+                    "Fix flaky login test",
+                    ReviewStatus::ChangesRequested,
+                    ChecksStatus::Failure,
+                    40,
+                ),
+                "deps",
+                "login-test",
             ),
-            pr(
-                1,
-                "Bump dependencies",
-                ReviewStatus::None,
-                ChecksStatus::Success,
-                300,
+            on_branch(
+                pr(
+                    1,
+                    "Bump dependencies",
+                    ReviewStatus::None,
+                    ChecksStatus::Success,
+                    300,
+                ),
+                "main",
+                "deps",
+            ),
+            on_branch(
+                pr(
+                    4,
+                    "Update the docs",
+                    ReviewStatus::Approved,
+                    ChecksStatus::Success,
+                    120,
+                ),
+                "main",
+                "docs",
             ),
         ],
     });
@@ -185,12 +219,16 @@ async fn script(
         sleep(Duration::from_millis(1000)).await;
         say(ServerEvent::PrUpsert {
             seq: 3,
-            pr: pr(
-                2,
-                "Fix flaky login test",
-                ReviewStatus::Approved,
-                ChecksStatus::Success,
-                0,
+            pr: on_branch(
+                pr(
+                    2,
+                    "Fix flaky login test",
+                    ReviewStatus::Approved,
+                    ChecksStatus::Success,
+                    0,
+                ),
+                "deps",
+                "login-test",
             ),
         });
         sleep(Duration::from_millis(1000)).await;

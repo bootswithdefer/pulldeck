@@ -25,6 +25,9 @@ query($q: String!, $after: String) {
         title
         url
         isDraft
+        isCrossRepository
+        baseRefName
+        headRefName
         updatedAt
         reviewDecision
         repository { nameWithOwner }
@@ -243,6 +246,12 @@ fn parse_pr(node: &Value) -> Option<PullRequest> {
         review: ReviewStatus::from_graphql(node["reviewDecision"].as_str()),
         checks: ChecksStatus::from_graphql(rollup),
         updated_at: node["updatedAt"].as_str()?.parse().ok()?,
+        base_ref: node["baseRefName"].as_str().unwrap_or_default().to_owned(),
+        // A branch in a fork is not a branch of this repository that another PR could target.
+        head_ref: match node["isCrossRepository"].as_bool() {
+            Some(false) => node["headRefName"].as_str().unwrap_or_default().to_owned(),
+            _ => String::new(),
+        },
     })
 }
 

@@ -278,9 +278,15 @@ ApplicationWindow {
                     required property string checks
                     required property real updatedAt
                     required property bool serverBacked
+                    // Where this pull request sits in a stack of PRs, each targeting the one below it; the size is 0
+                    // for one that is in no stack.
+                    required property int stackDepth
+                    required property int stackPosition
+                    required property int stackSize
                     width: ListView.view.width
                     // Leave room for the scroll bar, which is drawn over the list, when the list is long enough to have one.
                     rightPadding: 12 + (ListView.view.contentHeight > ListView.view.height ? 14 : 0)
+                    leftPadding: 12 + row.stackDepth * 24
                     onClicked: {
                         backend.viewing(row.repo, row.number);
                         Qt.openUrlExternally(row.url);
@@ -294,13 +300,13 @@ ApplicationWindow {
                             Layout.fillWidth: true
 
                             Label {
-                                text: (row.isDraft ? qsTr("[draft] ") : "") + row.title
+                                text: (row.stackDepth > 0 ? "↳ " : "") + (row.isDraft ? qsTr("[draft] ") : "") + row.title
                                 font.bold: true
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                             Label {
-                                text: row.repo + " #" + row.number
+                                text: row.repo + " #" + row.number + (row.stackSize > 0 ? qsTr("  ·  stack %1 of %2").arg(row.stackPosition).arg(row.stackSize) : "")
                                 opacity: 0.65
                                 font.pointSize: Application.font.pointSize - 1
                             }
