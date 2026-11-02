@@ -7,6 +7,7 @@
 use crate::backend::runtime;
 use chrono::{DateTime, Duration, Utc};
 use pulldeck_core::session::{Notification, NotificationKind};
+use pulldeck_core::PullRequest;
 
 /// Older than this when it arrives, a notification is backlog rather than news.
 const FRESH_FOR: Duration = Duration::minutes(5);
@@ -35,6 +36,55 @@ pub(crate) fn announce(n: &Notification) {
         return;
     }
     let (title, body) = text(n);
+    show(title, body);
+}
+
+/// Pull requests in `new` that were not in `old`. Nothing is new before a first poll has
+/// succeeded (`old` is `None`), so launching the app does not announce every open request.
+fn newly_requested<'a>(
+    old: Option<&[PullRequest]>,
+    new: &'a [PullRequest],
+) -> Vec<&'a PullRequest> {
+    let Some(old) = old else { return Vec::new() };
+    new.iter()
+        .filter(|n| !old.iter().any(|o| o.repo == n.repo && o.number == n.number))
+        .collect()
+}
+
+/// The most review requests announced one by one; more than this arrive as a single summary.
+const MAX_SEPARATE: usize = 3;
+
+/// Titles and bodies of the notifications for newly requested reviews.
+fn review_text(requests: &[&PullRequest]) -> Vec<(String, String)> {
+    if requests.len() > MAX_SEPARATE {
+        return vec![(
+            format!("{} new review requests", requests.len()),
+            String::new(),
+        )];
+    }
+    requests
+        .iter()
+        .map(|pr| {
+            (
+                format!(
+                    "{} asked you to review {}#{}",
+                    pr.author, pr.repo, pr.number
+                ),
+                pr.title.clone(),
+            )
+        })
+        .collect()
+}
+
+/// Announces review requests that appeared since `old` (see [`newly_requested`]).
+pub(crate) fn announce_review_requests(old: Option<&[PullRequest]>, new: &[PullRequest]) {
+    for (title, body) in review_text(&newly_requested(old, new)) {
+        show(title, body);
+    }
+}
+
+/// Shows one desktop notification unless the user turned them off.
+fn show(title: String, body: String) {
     runtime().spawn_blocking(move || {
         if !crate::auth::load_settings().notifications {
             return;
@@ -89,6 +139,51 @@ mod tests {
                 "hubot asked you to review o/r#7".into(),
                 "please look".into()
             )
+        );
+    }
+
+    fn request(repo: &str, number: u64) -> PullRequest {
+        PullRequest {
+            number,
+            title: "Fix it".into(),
+            url: String::new(),
+            repo: repo.into(),
+            author: "hubot".into(),
+            is_draft: false,
+            review: pulldeck_core::ReviewStatus::None,
+            checks: pulldeck_core::ChecksStatus::None,
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn the_first_poll_announces_nothing() {
+        let all = [request("o/r", 1), request("o/r", 2)];
+        assert!(newly_requested(None, &all).is_empty());
+    }
+
+    #[test]
+    fn only_requests_absent_from_the_last_poll_are_new() {
+        let old = [request("o/r", 1), request("o/r", 2)];
+        let new = [request("o/r", 3), request("o/r", 1), request("o/other", 2)];
+        let found = newly_requested(Some(&old), &new);
+        assert_eq!(found, vec![&new[0], &new[2]]);
+    }
+
+    #[test]
+    fn a_few_requests_are_announced_one_by_one_and_many_as_one_summary() {
+        let prs: Vec<_> = (1..=4).map(|n| request("o/r", n)).collect();
+        let few: Vec<_> = prs[..2].iter().collect();
+        let texts = review_text(&few);
+        assert_eq!(texts.len(), 2);
+        assert_eq!(
+            texts[0],
+            ("hubot asked you to review o/r#1".into(), "Fix it".into())
+        );
+        let many: Vec<_> = prs.iter().collect();
+        assert_eq!(
+            review_text(&many),
+            vec![("4 new review requests".into(), String::new())]
         );
     }
 

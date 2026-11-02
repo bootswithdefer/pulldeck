@@ -25,6 +25,8 @@ const UPDATED_AT: i32 = 0x108;
 #[derive(Default)]
 pub struct ReviewModelRust {
     prs: Vec<PullRequest>,
+    /// Whether a poll has succeeded yet; until then nothing counts as a new request.
+    loaded: bool,
     pub(crate) count: i32,
 }
 
@@ -32,9 +34,11 @@ impl qobject::ReviewModel {
     /// Shows a fresh poll. The list is small and replaced as a whole, but an unchanged poll
     /// touches nothing, so scrolling and selection survive the once-a-minute refresh.
     pub fn replace(mut self: Pin<&mut Self>, prs: Vec<PullRequest>) {
+        let was_loaded = std::mem::replace(&mut self.as_mut().rust_mut().loaded, true);
         if self.prs == prs {
             return;
         }
+        crate::notify::announce_review_requests(was_loaded.then_some(&self.prs[..]), &prs);
         self.as_mut().review_begin_reset_model();
         self.as_mut().rust_mut().prs = prs;
         self.as_mut().review_end_reset_model();

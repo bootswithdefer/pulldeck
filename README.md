@@ -35,8 +35,8 @@
   App) keep being polled and are merged into the same list.
 - **Review requested tab** lists open pull requests where GitHub asks you personally for a
   review (not through a team), polled together with your own.
-- **Desktop notifications** for things other users send you (review requests, nudges, messages),
-  shown as they arrive. Turn them off with `notifications = false` in
+- **Desktop notifications** for things other users send you (review requests, nudges, messages)
+  and for review requests that appear on GitHub between polls, shown as they arrive. Turn them off with `notifications = false` in
   `~/.config/pulldeck/config.toml`.
 - **Presence is opt-in**: telling others which PR you are viewing is off unless you turn it on.
 - **Native look**: Qt 6 with the Fusion style, which follows your KDE colour scheme.
