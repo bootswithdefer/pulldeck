@@ -4,7 +4,7 @@
 //! only inserts, removes or updates the rows that changed (see `pulldeck_core::store::diff`).
 
 use crate::inbox::InboxModelRust;
-use crate::reviews::ReviewModelRust;
+use crate::pr_list::PrListModelRust;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QByteArray, QHash, QHashPair_i32_QByteArray, QModelIndex, QString, QVariant};
 use pulldeck_core::session::ClientCommand;
@@ -183,10 +183,19 @@ pub mod qobject {
         ///
         /// # Safety
         ///
-        /// `reviews` must be null or point to a live `ReviewModel`.
+        /// `reviews` must be null or point to a live `PrListModel`.
         #[qinvokable]
         #[cxx_name = "attachReviews"]
-        unsafe fn attach_reviews(self: Pin<&mut PrBackend>, reviews: *mut ReviewModel);
+        unsafe fn attach_reviews(self: Pin<&mut PrBackend>, reviews: *mut PrListModel);
+
+        /// Give the backend the model that lists the user's recently closed pull requests.
+        ///
+        /// # Safety
+        ///
+        /// `history` must be null or point to a live `PrListModel`.
+        #[qinvokable]
+        #[cxx_name = "attachHistory"]
+        unsafe fn attach_history(self: Pin<&mut PrBackend>, history: *mut PrListModel);
     }
 
     // QAbstractListModel virtuals.
@@ -318,39 +327,40 @@ pub mod qobject {
         unsafe fn end_insert_rows(self: Pin<&mut InboxModel>);
     }
 
-    // Pull requests waiting for the user's review; state and behaviour in `reviews.rs`.
-    impl cxx_qt::Threading for ReviewModel {}
+    // Pull requests waiting for the user's review; state and behaviour in `pr_list.rs`.
+    impl cxx_qt::Threading for PrListModel {}
 
     unsafe extern "RustQt" {
         #[qobject]
         #[base = QAbstractListModel]
         #[qml_element]
         #[qproperty(i32, count)]
+        #[qproperty(bool, announce)]
         #[namespace = "pulldeck"]
-        type ReviewModel = super::ReviewModelRust;
+        type PrListModel = super::PrListModelRust;
 
         #[qinvokable]
         #[cxx_override]
-        fn data(self: &ReviewModel, index: &QModelIndex, role: i32) -> QVariant;
+        fn data(self: &PrListModel, index: &QModelIndex, role: i32) -> QVariant;
 
         #[qinvokable]
         #[cxx_override]
         #[cxx_name = "roleNames"]
-        fn role_names(self: &ReviewModel) -> QHash_i32_QByteArray;
+        fn role_names(self: &PrListModel) -> QHash_i32_QByteArray;
 
         #[qinvokable]
         #[cxx_override]
         #[cxx_name = "rowCount"]
-        fn row_count(self: &ReviewModel, parent: &QModelIndex) -> i32;
+        fn row_count(self: &PrListModel, parent: &QModelIndex) -> i32;
 
         /// Wraps replacing the whole list.
         #[inherit]
         #[cxx_name = "beginResetModel"]
-        fn review_begin_reset_model(self: Pin<&mut ReviewModel>);
-        /// Pairs with `review_begin_reset_model`.
+        fn list_begin_reset_model(self: Pin<&mut PrListModel>);
+        /// Pairs with `list_begin_reset_model`.
         #[inherit]
         #[cxx_name = "endResetModel"]
-        fn review_end_reset_model(self: Pin<&mut ReviewModel>);
+        fn list_end_reset_model(self: Pin<&mut PrListModel>);
     }
 
     unsafe extern "RustQt" {
@@ -434,7 +444,9 @@ pub struct PrBackendRust {
     /// and a bare `CxxQtThread` is not.
     pub(crate) inbox: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::InboxModel>>>,
     /// Where pull requests awaiting the user's review go.
-    pub(crate) reviews: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::ReviewModel>>>,
+    pub(crate) reviews: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::PrListModel>>>,
+    /// Where the user's recently closed pull requests go.
+    pub(crate) history: Option<std::sync::Arc<cxx_qt::CxxQtThread<qobject::PrListModel>>>,
     /// The tray icon, once the desktop accepted it, and what it should show.
     pub(crate) tray: Option<crate::tray::TrayHandle>,
     pub(crate) tray_attention: bool,
@@ -467,6 +479,7 @@ impl Default for PrBackendRust {
             commands: None,
             inbox: None,
             reviews: None,
+            history: None,
             tray: None,
             tray_attention: false,
             tray_tooltip: String::new(),
@@ -491,6 +504,8 @@ struct Fetched {
     authored: Result<(String, Vec<PullRequest>), String>,
     /// `None` when that search failed, so the last list stays.
     reviews: Option<Vec<PullRequest>>,
+    /// Merged and closed pull requests; `None` when that search failed.
+    history: Option<Vec<PullRequest>>,
 }
 
 async fn fetch() -> Fetched {
@@ -500,14 +515,22 @@ async fn fetch() -> Fetched {
             return Fetched {
                 authored: Err(e.to_string()),
                 reviews: None,
+                history: None,
             }
         }
     };
-    let (authored, reviews) = tokio::join!(client.authored_prs(), client.review_requests());
+    let (authored, reviews, history) = tokio::join!(
+        client.authored_prs(),
+        client.review_requests(),
+        client.recently_closed()
+    );
     Fetched {
         authored: authored.map_err(|e| e.to_string()),
         reviews: reviews
             .map_err(|error| tracing::warn!(%error, "could not fetch review requests"))
+            .ok(),
+        history: history
+            .map_err(|error| tracing::warn!(%error, "could not fetch closed pull requests"))
             .ok(),
     }
 }
@@ -529,6 +552,9 @@ impl qobject::PrBackend {
             let queued = qt_thread.queue(move |mut backend| {
                 if let (Some(model), Some(reviews)) = (&backend.reviews, fetched.reviews) {
                     model.queue(move |mut m| m.as_mut().replace(reviews)).ok();
+                }
+                if let (Some(model), Some(history)) = (&backend.history, fetched.history) {
+                    model.queue(move |mut m| m.as_mut().replace(history)).ok();
                 }
                 match fetched.authored {
                     Ok((login, prs)) => {

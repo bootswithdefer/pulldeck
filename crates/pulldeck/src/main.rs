@@ -6,7 +6,7 @@ mod backend;
 mod demo;
 mod inbox;
 mod notify;
-mod reviews;
+mod pr_list;
 mod server;
 mod tray;
 

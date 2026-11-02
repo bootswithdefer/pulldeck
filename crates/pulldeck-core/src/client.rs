@@ -6,7 +6,8 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 const ENDPOINT: &str = "https://api.github.com/graphql";
-const PAGE_SIZE: u32 = 50;
+/// Pages of an open-pull-request search to read: a ceiling of 500, far more than anyone has open.
+const MAX_PAGES: usize = 10;
 /// GitHub's search sometimes answers with a gateway timeout after ~30s and succeeds on the next
 /// try, so allow a slow answer and try a few times.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -75,31 +76,47 @@ impl GitHubClient {
     ///
     /// Returns the viewer's login together with the PRs, newest first.
     pub async fn authored_prs(&self) -> Result<(String, Vec<PullRequest>)> {
-        self.search("author:@me").await
+        self.search("is:open author:@me", MAX_PAGES).await
     }
 
     /// Fetches all open pull requests where a review is requested from the authenticated user,
     /// directly (not through a team: an organisation's teams can ask for hundreds), newest first.
     pub async fn review_requests(&self) -> Result<Vec<PullRequest>> {
-        Ok(self.search("user-review-requested:@me").await?.1)
+        Ok(self
+            .search("is:open user-review-requested:@me", MAX_PAGES)
+            .await?
+            .1)
     }
 
-    /// Runs a pull request search for `qualifier` over open, unarchived pull requests.
-    async fn search(&self, qualifier: &str) -> Result<(String, Vec<PullRequest>)> {
+    /// The most recent pull requests the authenticated user wrote that are no longer open (merged
+    /// or closed), newest first. One page: this is a look back, not an archive.
+    pub async fn recently_closed(&self) -> Result<Vec<PullRequest>> {
+        Ok(self.search("is:closed author:@me", 1).await?.1)
+    }
+
+    /// Runs a pull request search for `qualifier` over unarchived pull requests, reading at most
+    /// `max_pages` pages.
+    async fn search(
+        &self,
+        qualifier: &str,
+        max_pages: usize,
+    ) -> Result<(String, Vec<PullRequest>)> {
         let mut prs = Vec::new();
         let mut after: Option<String> = None;
+        let mut pages = 0;
 
         let login = loop {
             let body = json!({
                 "query": AUTHORED_QUERY,
-                "variables": { "q": format!("is:pr is:open archived:false {qualifier} sort:updated-desc"), "after": after },
+                "variables": { "q": format!("is:pr archived:false {qualifier} sort:updated-desc"), "after": after },
             });
             let response = self.post(&body).await?;
 
             let (page_login, page, next) = parse_page(&response)?;
             prs.extend(page);
+            pages += 1;
             match next {
-                Some(cursor) if prs.len() < (PAGE_SIZE as usize) * 10 => after = Some(cursor),
+                Some(cursor) if pages < max_pages => after = Some(cursor),
                 _ => break page_login,
             }
         };
@@ -278,6 +295,23 @@ mod tests {
 
         let (login, prs) = client_for(&server).authored_prs().await.unwrap();
         assert_eq!(login, "octocat");
+        assert!(prs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recently_closed_reads_one_page_even_when_there_are_more() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(body_string_contains("is:closed author:@me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {
+                "viewer": {"login": "octocat"},
+                "search": {"pageInfo": {"hasNextPage": true, "endCursor": "c1"}, "nodes": []}
+            }})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let prs = client_for(&server).recently_closed().await.unwrap();
         assert!(prs.is_empty());
     }
 

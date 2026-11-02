@@ -21,8 +21,15 @@ ApplicationWindow {
         id: inbox
     }
 
-    ReviewModel {
+    // Open pull requests where the user's review is requested; new ones raise a notification.
+    PrListModel {
         id: reviews
+        announce: true
+    }
+
+    // The user's most recently merged or closed pull requests.
+    PrListModel {
+        id: history
     }
 
     SignInDialog {
@@ -95,6 +102,7 @@ ApplicationWindow {
         // The inbox must be attached before a server session can start delivering to it.
         backend.attachInbox(inbox);
         backend.attachReviews(reviews);
+        backend.attachHistory(history);
         // With a tray, closing the window hides it; without one (a bare window manager) it quits.
         syncTray();
         backend.startTray();
@@ -217,6 +225,9 @@ ApplicationWindow {
             }
             TabButton {
                 text: qsTr("Inbox") + (inbox.unread > 0 ? " (" + inbox.unread + ")" : "")
+            }
+            TabButton {
+                text: qsTr("History")
             }
         }
 
@@ -388,6 +399,59 @@ ApplicationWindow {
                 formatter: backend
                 now: root.now
                 onAcknowledge: notificationId => inbox.ack(notificationId)
+            }
+
+            ListView {
+                id: historyList
+                clip: true
+                model: history
+                spacing: 1
+                ScrollBar.vertical: ScrollBar {}
+
+                Label {
+                    anchors.centerIn: parent
+                    visible: historyList.count === 0
+                    text: qsTr("No merged or closed pull requests yet")
+                    opacity: 0.6
+                }
+
+                delegate: ItemDelegate {
+                    id: past
+                    required property string title
+                    required property string repo
+                    required property int number
+                    required property string url
+                    required property real updatedAt
+                    width: ListView.view.width
+                    onClicked: Qt.openUrlExternally(past.url)
+
+                    contentItem: RowLayout {
+                        spacing: 12
+
+                        ColumnLayout {
+                            spacing: 2
+                            Layout.fillWidth: true
+
+                            Label {
+                                text: past.title
+                                font.bold: true
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Label {
+                                text: past.repo + " #" + past.number
+                                opacity: 0.65
+                                font.pointSize: Application.font.pointSize - 1
+                            }
+                        }
+                        Label {
+                            text: backend.ago(past.updatedAt, root.now)
+                            opacity: 0.6
+                            Layout.minimumWidth: 70
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                }
             }
         }
     }

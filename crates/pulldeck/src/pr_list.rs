@@ -1,7 +1,8 @@
-//! Pull requests waiting for the user's review, as a Qt list model.
+//! A list of pull requests as a Qt list model: the ones waiting for the user's review, and the
+//! user's recently closed ones.
 //!
 //! These always come from polling GitHub (a server is not involved), once per refresh together
-//! with the user's own pull requests. The Qt object itself (`ReviewModel`) is declared in
+//! with the user's own pull requests. The Qt object itself (`PrListModel`) is declared in
 //! `backend.rs`'s bridge, for the same reason as `InboxModel`.
 
 use crate::backend::qobject;
@@ -21,16 +22,18 @@ const REVIEW: i32 = 0x106;
 const CHECKS: i32 = 0x107;
 const UPDATED_AT: i32 = 0x108;
 
-/// Backing state for [`qobject::ReviewModel`].
+/// Backing state for [`qobject::PrListModel`].
 #[derive(Default)]
-pub struct ReviewModelRust {
+pub struct PrListModelRust {
     prs: Vec<PullRequest>,
     /// Whether a poll has succeeded yet; until then nothing counts as a new request.
     loaded: bool,
     pub(crate) count: i32,
+    /// Whether pull requests new to this list raise a desktop notification.
+    pub(crate) announce: bool,
 }
 
-impl qobject::ReviewModel {
+impl qobject::PrListModel {
     /// Shows a fresh poll. The list is small and replaced as a whole, but an unchanged poll
     /// touches nothing, so scrolling and selection survive the once-a-minute refresh.
     pub fn replace(mut self: Pin<&mut Self>, prs: Vec<PullRequest>) {
@@ -38,12 +41,14 @@ impl qobject::ReviewModel {
         if self.prs == prs {
             return;
         }
-        crate::notify::announce_review_requests(was_loaded.then_some(&self.prs[..]), &prs);
-        self.as_mut().review_begin_reset_model();
+        if self.announce {
+            crate::notify::announce_review_requests(was_loaded.then_some(&self.prs[..]), &prs);
+        }
+        self.as_mut().list_begin_reset_model();
         self.as_mut().rust_mut().prs = prs;
-        self.as_mut().review_end_reset_model();
+        self.as_mut().list_end_reset_model();
         let count = self.prs.len() as i32;
-        tracing::debug!(count, "review requests updated");
+        tracing::debug!(count, announce = self.announce, "pull request list updated");
         self.as_mut().set_count(count);
     }
 

@@ -101,11 +101,23 @@ impl qobject::PrBackend {
     ///
     /// # Safety
     ///
-    /// `reviews` must be null or point to a live `ReviewModel` (QML guarantees this).
-    pub unsafe fn attach_reviews(mut self: Pin<&mut Self>, reviews: *mut qobject::ReviewModel) {
+    /// `reviews` must be null or point to a live `PrListModel` (QML guarantees this).
+    pub unsafe fn attach_reviews(mut self: Pin<&mut Self>, reviews: *mut qobject::PrListModel) {
         // SAFETY: the caller guarantees the pointer is null or valid.
         if let Some(reviews) = unsafe { reviews.as_ref() } {
             self.as_mut().rust_mut().reviews = Some(Arc::new(reviews.qt_thread()));
+        }
+    }
+
+    /// Gives the backend the closed-pull-request list so polling can fill it.
+    ///
+    /// # Safety
+    ///
+    /// `history` must be null or point to a live `PrListModel` (QML guarantees this).
+    pub unsafe fn attach_history(mut self: Pin<&mut Self>, history: *mut qobject::PrListModel) {
+        // SAFETY: the caller guarantees the pointer is null or valid.
+        if let Some(history) = unsafe { history.as_ref() } {
+            self.as_mut().rust_mut().history = Some(Arc::new(history.qt_thread()));
         }
     }
 
