@@ -35,6 +35,9 @@ pub struct Settings {
     pub presence: bool,
     /// Show a desktop notification when another user sends you something. On unless turned off.
     pub notifications: bool,
+    /// Repositories to leave out of every list: `owner/name`, or `owner/*` for a whole owner.
+    /// Matching ignores case.
+    pub ignored_repos: Vec<String>,
 }
 
 impl Default for Settings {
@@ -43,6 +46,7 @@ impl Default for Settings {
             server_url: None,
             presence: false,
             notifications: true,
+            ignored_repos: Vec::new(),
         }
     }
 }
@@ -75,6 +79,17 @@ impl Settings {
         std::fs::write(&temp, toml::to_string_pretty(self)?)?;
         std::fs::rename(&temp, path)?;
         Ok(())
+    }
+
+    /// Whether `repo` (`owner/name`) is on the ignore list.
+    pub fn ignores(&self, repo: &str) -> bool {
+        let owner_wildcard = repo
+            .split_once('/')
+            .map(|(owner, _)| format!("{owner}/*"))
+            .unwrap_or_default();
+        self.ignored_repos.iter().any(|pattern| {
+            pattern.eq_ignore_ascii_case(repo) || pattern.eq_ignore_ascii_case(&owner_wildcard)
+        })
     }
 
     /// The validated server address, if one is configured.
@@ -200,6 +215,21 @@ mod tests {
     }
 
     #[test]
+    fn ignored_repos_match_exactly_or_by_owner_and_ignore_case() {
+        let s = Settings {
+            ignored_repos: vec!["acme/noisy".into(), "Bots/*".into()],
+            ..Settings::default()
+        };
+        assert!(s.ignores("acme/noisy"));
+        assert!(s.ignores("ACME/Noisy"));
+        assert!(s.ignores("bots/anything"));
+        assert!(!s.ignores("acme/quiet"));
+        assert!(!s.ignores("acme/noisy-2"));
+        assert!(!s.ignores("notbots/x"));
+        assert!(!Settings::default().ignores("acme/noisy"));
+    }
+
+    #[test]
     fn a_missing_file_yields_the_defaults() {
         let dir = tempfile::tempdir().unwrap();
         let loaded = Settings::load_from(&dir.path().join("nope.toml")).unwrap();
@@ -214,6 +244,7 @@ mod tests {
             server_url: Some("https://deck.example.com".into()),
             presence: true,
             notifications: false,
+            ignored_repos: vec!["acme/noisy".into()],
         };
         settings.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path).unwrap(), settings);

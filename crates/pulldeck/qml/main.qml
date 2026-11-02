@@ -170,6 +170,21 @@ ApplicationWindow {
                 onClicked: backend.auth === "signedIn" ? backend.signOut() : signIn.open()
             }
             ToolButton {
+                text: "⚙"
+                onClicked: settingsMenu.popup()
+
+                Menu {
+                    id: settingsMenu
+
+                    MenuItem {
+                        text: qsTr("Desktop notifications")
+                        checkable: true
+                        checked: backend.notifications
+                        onToggled: backend.setNotificationsEnabled(checked)
+                    }
+                }
+            }
+            ToolButton {
                 text: qsTr("Refresh")
                 // The server pushes changes, but not for repositories it cannot see.
                 enabled: !backend.loading

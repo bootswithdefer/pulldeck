@@ -64,6 +64,9 @@ pub mod qobject {
         /// Whether the user chose to tell others which PR they are viewing. Off by default; change
         /// it with `setPresenceEnabled`, which also saves it.
         #[qproperty(bool, presence)]
+        /// Whether desktop notifications are on. Change it with `setNotificationsEnabled`, which
+        /// also saves it.
+        #[qproperty(bool, notifications)]
         /// Whether the server can read your pull requests: "ok", "needsSignin" (sign in again; the
         /// list is stale) or "notInstalled" (the GitHub App is not installed anywhere you can see).
         #[qproperty(QString, sync_status, cxx_name = "syncStatus")]
@@ -127,6 +130,11 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "trayQuitRequested"]
         fn tray_quit_requested(self: Pin<&mut Self>);
+
+        /// Turn desktop notifications on or off and remember the choice.
+        #[qinvokable]
+        #[cxx_name = "setNotificationsEnabled"]
+        fn set_notifications_enabled(self: Pin<&mut Self>, enabled: bool);
 
         /// The user opened this PR. Sent to the server only if presence is on.
         #[qinvokable]
@@ -416,6 +424,9 @@ pub struct PrBackendRust {
     connection: QString,
     server_configured: bool,
     presence: bool,
+    notifications: bool,
+    /// The settings read at startup; `ignored_repos` filters every list.
+    pub(crate) filters: pulldeck_core::settings::Settings,
     sync_status: QString,
     install_url: QString,
     auth: QString,
@@ -462,6 +473,8 @@ impl Default for PrBackendRust {
             connection: QString::from("offline"),
             server_configured: false,
             presence: false,
+            notifications: true,
+            filters: Default::default(),
             sync_status: QString::from("ok"),
             install_url: QString::default(),
             auth: QString::from("signedOut"),
@@ -550,6 +563,13 @@ impl qobject::PrBackend {
         runtime().spawn(async move {
             let fetched = fetch().await;
             let queued = qt_thread.queue(move |mut backend| {
+                let mut fetched = fetched;
+                for list in [&mut fetched.reviews, &mut fetched.history]
+                    .into_iter()
+                    .flatten()
+                {
+                    list.retain(|p| !backend.filters.ignores(&p.repo));
+                }
                 if let (Some(model), Some(reviews)) = (&backend.reviews, fetched.reviews) {
                     model.queue(move |mut m| m.as_mut().replace(reviews)).ok();
                 }
@@ -608,7 +628,8 @@ impl qobject::PrBackend {
     /// Recomputes the merged list and tells attached views about each inserted, removed or
     /// updated row instead of resetting the whole model (so selection and scroll survive).
     fn rebuild(mut self: Pin<&mut Self>) {
-        let merged = store::merge(&self.server, &self.polled);
+        let mut merged = store::merge(&self.server, &self.polled);
+        merged.retain(|p| !self.filters.ignores(&p.repo));
         let backed: HashSet<_> = self
             .server
             .iter()

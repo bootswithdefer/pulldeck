@@ -40,7 +40,11 @@
 - **Desktop notifications** for things other users send you (review requests, nudges, messages)
   and for review requests that appear on GitHub between polls, shown as they arrive. Your own pull
   requests also notify when their checks start failing, or when they are approved or get changes
-  requested. Turn them all off with `notifications = false` in `~/.config/pulldeck/config.toml`.
+  requested. Turn them all off from the ⚙ menu or with `notifications = false` in
+  `~/.config/pulldeck/config.toml`.
+- **Ignore repositories** you do not want to see, in every tab, with
+  `ignored_repos = ["acme/noisy", "bots/*"]` in the same file (`owner/name` or `owner/*`, case
+  does not matter). Restart to apply.
 - **Presence is opt-in**: telling others which PR you are viewing is off unless you turn it on.
 - **Native look**: Qt 6 with the Fusion style, which follows your KDE colour scheme.
 
@@ -138,7 +142,8 @@ flowchart LR
 - [x] System tray icon with attention state (StatusNotifierItem: KDE, COSMIC, and GNOME with an
   extension)
 - [x] Merged/closed history (the latest 50)
-- [ ] Settings and filters (config in `~/.config/pulldeck/`)
+- [x] Settings and filters (config in `~/.config/pulldeck/`): notifications switch, ignored
+  repositories
 - [ ] Packaging: AUR, Flatpak
 
 ## Development

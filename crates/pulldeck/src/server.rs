@@ -133,13 +133,15 @@ impl qobject::PrBackend {
             return;
         };
         self.as_mut().rust_mut().inbox = Some(Arc::new(inbox.qt_thread()));
+        let settings = crate::auth::load_settings();
+        self.as_mut().set_presence(settings.presence);
+        self.as_mut().set_notifications(settings.notifications);
+        self.as_mut().rust_mut().filters = settings;
         #[cfg(feature = "demo")]
         if std::env::var_os("PULLDECK_DEMO").is_some() {
             crate::demo::start(self);
             return;
         }
-        let presence = crate::auth::load_settings().presence;
-        self.as_mut().set_presence(presence);
         if let Some((server, token)) = development_session() {
             // A development server has fake accounts; keep real pull requests out of its list.
             self.as_mut().rust_mut().poll = false;
@@ -208,6 +210,15 @@ impl qobject::PrBackend {
             to: to.to_string(),
             body: body.to_string(),
         });
+    }
+
+    /// Turns desktop notifications on or off and saves the choice.
+    pub fn set_notifications_enabled(mut self: Pin<&mut Self>, enabled: bool) {
+        if *self.notifications() == enabled {
+            return;
+        }
+        self.as_mut().set_notifications(enabled);
+        runtime().spawn_blocking(move || crate::auth::remember_notifications(enabled));
     }
 
     pub fn set_presence_enabled(mut self: Pin<&mut Self>, enabled: bool) {

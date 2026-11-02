@@ -33,16 +33,26 @@ fn remember_server(server: &ServerUrl) -> Result<(), String> {
     settings.save_to(&path).map_err(|e| e.to_string())
 }
 
-/// Saves the presence choice, keeping every other setting.
-pub(crate) fn remember_presence(enabled: bool) {
+/// Changes one setting and saves the file, keeping every other setting.
+fn update_settings(what: &str, change: impl FnOnce(&mut Settings)) {
     let Some(path) = Settings::default_path() else {
         return;
     };
     let mut settings = load_settings();
-    settings.presence = enabled;
+    change(&mut settings);
     if let Err(error) = settings.save_to(&path) {
-        tracing::warn!(%error, "could not save the presence setting");
+        tracing::warn!(%error, "could not save the {what} setting");
     }
+}
+
+/// Saves the presence choice.
+pub(crate) fn remember_presence(enabled: bool) {
+    update_settings("presence", |s| s.presence = enabled);
+}
+
+/// Saves the notifications choice.
+pub(crate) fn remember_notifications(enabled: bool) {
+    update_settings("notifications", |s| s.notifications = enabled);
 }
 
 /// Runs a blocking keyring call off the async workers.
