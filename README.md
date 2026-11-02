@@ -144,7 +144,10 @@ flowchart LR
 - [x] Merged/closed history (the latest 50)
 - [x] Settings and filters (config in `~/.config/pulldeck/`): notifications switch, ignored
   repositories
-- [ ] Packaging: AUR, Flatpak
+- [x] Packaging: an Arch `PKGBUILD` ([packaging/aur](packaging/aur), builds and installs; not
+  yet published to the AUR)
+- [ ] Flatpak: a draft manifest exists but has never been built
+  ([packaging/flatpak](packaging/flatpak))
 
 ## Development
 

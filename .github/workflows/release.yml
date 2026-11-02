@@ -50,7 +50,7 @@ jobs:
         run: |
           name="pulldeck-${TAG}-x86_64-linux"
           mkdir "$name"
-          cp target/release/pulldeck packaging/pulldeck.desktop LICENSE README.md "$name"/
+          cp target/release/pulldeck packaging/pulldeck.desktop packaging/pulldeck.svg LICENSE README.md "$name"/
           tar czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
       # The release and its notes are created by release-plz; this only attaches the binaries.

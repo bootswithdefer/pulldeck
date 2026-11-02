@@ -1,0 +1,45 @@
+# Flatpak manifest for pulldeck. NOT BUILT OR TESTED YET: it is a starting point, see README.md.
+app-id: io.github.bootswithdefer.pulldeck
+runtime: org.kde.Platform
+runtime-version: '6.10'
+sdk: org.kde.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.llvm20
+command: pulldeck
+
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Desktop notifications and the tray icon (StatusNotifierItem) are D-Bus services.
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-*
+  # Remembering a pulldeck server sign-in goes through the Secret Service.
+  - --talk-name=org.freedesktop.secrets
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm20/bin
+  env:
+    CARGO_HOME: /run/build/pulldeck/cargo
+    CARGO_NET_OFFLINE: 'true'
+
+modules:
+  - name: pulldeck
+    buildsystem: simple
+    build-commands:
+      - cargo --offline build --release -p pulldeck --locked
+      - install -Dm755 target/release/pulldeck /app/bin/pulldeck
+      - install -Dm644 packaging/pulldeck.desktop /app/share/applications/io.github.bootswithdefer.pulldeck.desktop
+      - install -Dm644 packaging/pulldeck.svg /app/share/icons/hicolor/scalable/apps/io.github.bootswithdefer.pulldeck.svg
+    post-install:
+      # The icon and desktop file are named after the app id, which Flatpak requires.
+      - sed -i 's/^Icon=.*/Icon=io.github.bootswithdefer.pulldeck/' /app/share/applications/io.github.bootswithdefer.pulldeck.desktop
+    sources:
+      - type: git
+        url: https://github.com/bootswithdefer/pulldeck.git
+        tag: v0.1.1
+      # Generated, not checked in: see README.md.
+      - cargo-sources.json
