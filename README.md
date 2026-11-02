@@ -38,8 +38,9 @@
 - **History tab** with your 50 most recently merged or closed pull requests.
 - **Tray icon** that turns orange when something is waiting; closing the window hides it there.
 - **Desktop notifications** for things other users send you (review requests, nudges, messages)
-  and for review requests that appear on GitHub between polls, shown as they arrive. Turn them off with `notifications = false` in
-  `~/.config/pulldeck/config.toml`.
+  and for review requests that appear on GitHub between polls, shown as they arrive. Your own pull
+  requests also notify when their checks start failing, or when they are approved or get changes
+  requested. Turn them all off with `notifications = false` in `~/.config/pulldeck/config.toml`.
 - **Presence is opt-in**: telling others which PR you are viewing is off unless you turn it on.
 - **Native look**: Qt 6 with the Fusion style, which follows your KDE colour scheme.
 
@@ -132,7 +133,7 @@ flowchart LR
 
 - [x] Review-requested tab (requests made directly to you)
 - [x] Desktop notifications for inbox items
-- [ ] Desktop notifications for CI failures and approvals
+- [x] Desktop notifications for CI failures and approvals
 - [ ] Show other people's presence
 - [x] System tray icon with attention state (StatusNotifierItem: KDE, COSMIC, and GNOME with an
   extension)

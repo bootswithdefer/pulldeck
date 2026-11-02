@@ -7,7 +7,7 @@
 use crate::backend::runtime;
 use chrono::{DateTime, Duration, Utc};
 use pulldeck_core::session::{Notification, NotificationKind};
-use pulldeck_core::PullRequest;
+use pulldeck_core::{ChecksStatus, PullRequest, ReviewStatus};
 
 /// Older than this when it arrives, a notification is backlog rather than news.
 const FRESH_FOR: Duration = Duration::minutes(5);
@@ -83,6 +83,52 @@ pub(crate) fn announce_review_requests(old: Option<&[PullRequest]>, new: &[PullR
     }
 }
 
+/// What happened to the user's own pull requests between two lists: checks that started failing,
+/// and reviews that approved or asked for changes. Only pull requests in both lists count, so
+/// the first load, and a pull request that appears already failing, say nothing.
+fn status_changes(old: &[PullRequest], new: &[PullRequest]) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    for pr in new {
+        let Some(before) = old
+            .iter()
+            .find(|o| o.repo == pr.repo && o.number == pr.number)
+        else {
+            continue;
+        };
+        let name = format!("{}#{}", pr.repo, pr.number);
+        if pr.checks == ChecksStatus::Failure && before.checks != ChecksStatus::Failure {
+            found.push((format!("Checks failed on {name}"), pr.title.clone()));
+        }
+        if pr.review != before.review {
+            match pr.review {
+                ReviewStatus::Approved => {
+                    found.push((format!("{name} was approved"), pr.title.clone()));
+                }
+                ReviewStatus::ChangesRequested => {
+                    found.push((format!("Changes requested on {name}"), pr.title.clone()));
+                }
+                ReviewStatus::ReviewRequired | ReviewStatus::None => {}
+            }
+        }
+    }
+    found
+}
+
+/// Announces failing checks and new reviews on the user's own pull requests.
+pub(crate) fn announce_status_changes(old: &[PullRequest], new: &[PullRequest]) {
+    let changes = status_changes(old, new);
+    if changes.len() > MAX_SEPARATE {
+        show(
+            format!("{} updates on your pull requests", changes.len()),
+            String::new(),
+        );
+        return;
+    }
+    for (title, body) in changes {
+        show(title, body);
+    }
+}
+
 /// Shows one desktop notification unless the user turned them off.
 fn show(title: String, body: String) {
     runtime().spawn_blocking(move || {
@@ -154,6 +200,39 @@ mod tests {
             checks: pulldeck_core::ChecksStatus::None,
             updated_at: Utc::now(),
         }
+    }
+
+    #[test]
+    fn failing_checks_and_new_reviews_are_reported_once_each() {
+        let before = request("o/r", 1);
+        let mut failing = before.clone();
+        failing.checks = ChecksStatus::Failure;
+        let mut approved = before.clone();
+        approved.review = ReviewStatus::Approved;
+        let mut changes = before.clone();
+        changes.review = ReviewStatus::ChangesRequested;
+
+        let titles = |old: &PullRequest, new: &PullRequest| -> Vec<String> {
+            status_changes(std::slice::from_ref(old), std::slice::from_ref(new))
+                .into_iter()
+                .map(|(title, _)| title)
+                .collect()
+        };
+        assert_eq!(titles(&before, &failing), ["Checks failed on o/r#1"]);
+        assert_eq!(titles(&before, &approved), ["o/r#1 was approved"]);
+        assert_eq!(titles(&before, &changes), ["Changes requested on o/r#1"]);
+        // Nothing new: still failing, back to waiting, or unchanged.
+        assert!(titles(&failing, &failing).is_empty());
+        assert!(titles(&approved, &before).is_empty());
+        assert!(titles(&before, &before).is_empty());
+    }
+
+    #[test]
+    fn a_pull_request_new_to_the_list_is_not_a_change() {
+        let mut failing = request("o/r", 2);
+        failing.checks = ChecksStatus::Failure;
+        assert!(status_changes(&[], &[failing.clone()]).is_empty());
+        assert!(status_changes(&[request("o/r", 1)], &[failing]).is_empty());
     }
 
     #[test]

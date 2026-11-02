@@ -615,6 +615,7 @@ impl qobject::PrBackend {
             .map(|p| (p.repo.clone(), p.number))
             .collect();
         let previously_backed = std::mem::replace(&mut self.as_mut().rust_mut().backed, backed);
+        crate::notify::announce_status_changes(&self.prs, &merged);
         let changes = store::diff(&self.prs, &merged);
         tracing::debug!(
             rows = merged.len(),
